@@ -156,134 +156,177 @@ export default function TierSimScreen() {
     AsyncStorage.setItem('tiers', JSON.stringify(updatedTiers));
   };
 
+  // Calculate all values whenever tiers, cashBalance, or projectedPrice changes
+  useEffect(() => {
+    const calculateValues = () => {
+      // Convert string values to numbers
+      const totalCash = parseFloat(cashBalance) / 100 || 0;
+      const projectedPriceNum = parseFloat(projectedPrice) / 100 || 0;
+      
+      // Calculate values from visible tiers only
+      const visibleTiers = tiers.filter(tier => tier.isVisible);
+      let totalSpent = 0;
+      let totalShares = 0;
+
+      visibleTiers.forEach(tier => {
+        const price = parseFloat(tier.stockPrice) / 100 || 0;
+        const quantity = parseInt(tier.quantity, 10) || 0;
+        totalSpent += price * quantity;
+        totalShares += quantity;
+      });
+
+      // Calculate remaining balance
+      const remainingBalance = totalCash - totalSpent;
+
+      // Calculate average share price
+      const averageSharePrice = totalShares > 0 ? totalSpent / totalShares : 0;
+
+      // Calculate potential gains
+      const potentialValue = totalShares * projectedPriceNum;
+      const potentialGain = potentialValue - totalSpent;
+      const potentialPercentage = totalSpent > 0 
+        ? ((potentialValue - totalSpent) / totalSpent) * 100 
+        : 0;
+
+      // Update calculations state
+      setCalculations({
+        averageSharePrice,
+        potentialGain,
+        potentialPercentage,
+        remainingBalance,
+      });
+    };
+
+    calculateValues();
+  }, [tiers, cashBalance, projectedPrice]);
+
   return (
     <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
       <SafeAreaView style={styles.container}>
-        <ScrollView>
-          <View style={styles.content}>
-            {/* Header section with inputs */}
-            <View style={styles.header}>
-              <Text style={styles.headerTitle}>Tier Simulator</Text>
-              
-              {/* Total Cash to Invest Input */}
-              <View style={styles.inputContainer}>
-                <Text style={styles.inputLabel}>Total Cash to Invest:</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Enter total cash amount"
-                  keyboardType="numeric"
-                  value={formatNumberInput(cashBalance)}
-                  onChangeText={handleCashBalanceChange}
-                  returnKeyType="done"
-                  onSubmitEditing={() => Keyboard.dismiss()}
-                  enablesReturnKeyAutomatically={true}
-                />
-              </View>
+        {/* Fixed Header Section */}
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>Tier Simulator</Text>
+          
+          {/* Total Cash to Invest Input */}
+          <View style={styles.inputContainer}>
+            <Text style={styles.inputLabel}>Total Cash to Invest:</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Enter total cash amount"
+              keyboardType="numeric"
+              value={formatNumberInput(cashBalance)}
+              onChangeText={handleCashBalanceChange}
+              returnKeyType="done"
+              onSubmitEditing={() => Keyboard.dismiss()}
+              enablesReturnKeyAutomatically={true}
+            />
+          </View>
 
-              {/* Projected Price Input */}
-              <View style={styles.inputContainer}>
-                <Text style={styles.inputLabel}>Projected Price:</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Enter projected price"
-                  keyboardType="numeric"
-                  value={formatNumberInput(projectedPrice)}
-                  onChangeText={handleProjectedPriceChange}
-                  returnKeyType="done"
-                  onSubmitEditing={() => Keyboard.dismiss()}
-                  enablesReturnKeyAutomatically={true}
-                />
-              </View>
+          {/* Projected Price Input */}
+          <View style={styles.inputContainer}>
+            <Text style={styles.inputLabel}>Projected Price:</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Enter projected price"
+              keyboardType="numeric"
+              value={formatNumberInput(projectedPrice)}
+              onChangeText={handleProjectedPriceChange}
+              returnKeyType="done"
+              onSubmitEditing={() => Keyboard.dismiss()}
+              enablesReturnKeyAutomatically={true}
+            />
+          </View>
 
-              {/* Calculations Display */}
-              <View style={styles.calculationsContainer}>
-                {/* New Remaining Cash Balance Row */}
-                <View style={styles.calculationRow}>
-                  <Text style={styles.calculationLabel}>Remaining Cash Balance:</Text>
-                  <Text style={styles.calculationValue}>
-                    {new Intl.NumberFormat('en-US', {
-                      style: 'currency',
-                      currency: 'USD',
-                    }).format(calculations.remainingBalance)}
-                  </Text>
-                </View>
-                
-                <View style={[styles.calculationRow, styles.divider]} />
-
-                <View style={styles.calculationRow}>
-                  <Text style={styles.calculationLabel}>Average Share Price:</Text>
-                  <Text style={styles.calculationValue}>
-                    {new Intl.NumberFormat('en-US', {
-                      style: 'currency',
-                      currency: 'USD',
-                    }).format(calculations.averageSharePrice)}
-                  </Text>
-                </View>
-                <View style={styles.calculationRow}>
-                  <Text style={styles.calculationLabel}>Potential Dollar Gain:</Text>
-                  <Text style={styles.calculationValue}>
-                    {new Intl.NumberFormat('en-US', {
-                      style: 'currency',
-                      currency: 'USD',
-                    }).format(calculations.potentialGain)}
-                  </Text>
-                </View>
-                <View style={styles.calculationRow}>
-                  <Text style={styles.calculationLabel}>Potential Percentage Gain:</Text>
-                  <Text style={styles.calculationValue}>
-                    {calculations.potentialPercentage.toFixed(2)}%
-                  </Text>
-                </View>
-              </View>
+          {/* Calculations Display */}
+          <View style={styles.calculationsContainer}>
+            {/* New Remaining Cash Balance Row */}
+            <View style={styles.calculationRow}>
+              <Text style={styles.calculationLabel}>Remaining Cash Balance:</Text>
+              <Text style={styles.calculationValue}>
+                {new Intl.NumberFormat('en-US', {
+                  style: 'currency',
+                  currency: 'USD',
+                }).format(calculations.remainingBalance)}
+              </Text>
             </View>
+            
+            <View style={[styles.calculationRow, styles.divider]} />
 
-            {/* Tiers Section */}
-            <View style={styles.tiersSection}>
-              <View style={styles.tiersSectionHeader}>
-                <Text style={styles.tiersSectionTitle}>Purchase Tiers</Text>
-                <Pressable 
-                  style={styles.addTierButton}
-                  onPress={handleAddTier}
-                >
-                  <Ionicons name="add-circle-outline" size={24} color="#007AFF" />
-                  <Text style={styles.addTierText}>Add Tier</Text>
-                </Pressable>
-              </View>
-
-              {/* Add Column Headers */}
-              <View style={styles.columnHeaders}>
-                <View style={styles.visibilityColumn}>
-                  <Text style={styles.columnHeader}></Text>
-                </View>
-                <View style={styles.tierInputColumns}>
-                  <Text style={styles.columnHeader}>Price</Text>
-                  <Text style={styles.columnHeader}>Quantity</Text>
-                  <Text style={[styles.columnHeader, styles.totalHeader]}>Total Cost</Text>
-                </View>
-                <View style={styles.deleteColumn}>
-                  <Text style={styles.columnHeader}></Text>
-                </View>
-              </View>
-
-              {/* Tier List */}
-              <View style={styles.tierList}>
-                {tiers.map((tier) => (
-                  <TierRow
-                    key={tier.id}
-                    id={tier.id}
-                    stockPrice={tier.stockPrice}
-                    quantity={tier.quantity}
-                    isVisible={tier.isVisible}
-                    totalCost="$0.00"
-                    onUpdateTier={handleUpdateTier}
-                    onToggleVisibility={handleToggleVisibility}
-                    onDelete={handleDeleteTier}
-                  />
-                ))}
-              </View>
+            <View style={styles.calculationRow}>
+              <Text style={styles.calculationLabel}>Average Share Price:</Text>
+              <Text style={styles.calculationValue}>
+                {new Intl.NumberFormat('en-US', {
+                  style: 'currency',
+                  currency: 'USD',
+                }).format(calculations.averageSharePrice)}
+              </Text>
+            </View>
+            <View style={styles.calculationRow}>
+              <Text style={styles.calculationLabel}>Potential Dollar Gain:</Text>
+              <Text style={styles.calculationValue}>
+                {new Intl.NumberFormat('en-US', {
+                  style: 'currency',
+                  currency: 'USD',
+                }).format(calculations.potentialGain)}
+              </Text>
+            </View>
+            <View style={styles.calculationRow}>
+              <Text style={styles.calculationLabel}>Potential Percentage Gain:</Text>
+              <Text style={styles.calculationValue}>
+                {calculations.potentialPercentage.toFixed(2)}%
+              </Text>
             </View>
           </View>
-        </ScrollView>
+        </View>
+
+        {/* Tiers Section with Fixed Header and Scrollable List */}
+        <View style={styles.tiersSection}>
+          {/* Fixed Tiers Header */}
+          <View style={styles.tiersSectionHeader}>
+            <Text style={styles.tiersSectionTitle}>Purchase Tiers</Text>
+            <Pressable 
+              style={styles.addTierButton}
+              onPress={handleAddTier}
+            >
+              <Ionicons name="add-circle-outline" size={24} color="#007AFF" />
+              <Text style={styles.addTierText}>Add Tier</Text>
+            </Pressable>
+          </View>
+
+          {/* Fixed Column Headers */}
+          <View style={styles.columnHeaders}>
+            <View style={styles.visibilityColumn}>
+              <Text style={styles.columnHeader}></Text>
+            </View>
+            <View style={styles.tierInputColumns}>
+              <Text style={styles.columnHeader}>Price</Text>
+              <Text style={styles.columnHeader}>Quantity</Text>
+              <Text style={[styles.columnHeader, styles.totalHeader]}>Total Cost</Text>
+            </View>
+            <View style={styles.deleteColumn}>
+              <Text style={styles.columnHeader}></Text>
+            </View>
+          </View>
+
+          {/* Scrollable Tier List */}
+          <ScrollView style={styles.tierListContainer}>
+            <View style={styles.tierList}>
+              {tiers.map((tier) => (
+                <TierRow
+                  key={tier.id}
+                  id={tier.id}
+                  stockPrice={tier.stockPrice}
+                  quantity={tier.quantity}
+                  isVisible={tier.isVisible}
+                  totalCost="$0.00"
+                  onUpdateTier={handleUpdateTier}
+                  onToggleVisibility={handleToggleVisibility}
+                  onDelete={handleDeleteTier}
+                />
+              ))}
+            </View>
+          </ScrollView>
+        </View>
       </SafeAreaView>
     </TouchableWithoutFeedback>
   );
@@ -346,11 +389,8 @@ const styles = StyleSheet.create({
     borderBottomColor: '#ddd',
     marginVertical: 10,
   },
-  content: {
-    flex: 1,
-  },
   tiersSection: {
-    padding: 20,
+    flex: 1,
     backgroundColor: '#fff',
   },
   tiersSectionHeader: {
@@ -363,9 +403,14 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '600',
     color: '#333',
+    marginLeft: 20,
+  },
+  tierListContainer: {
+    flex: 1,
   },
   tierList: {
-    marginTop: 10,
+    padding: 20,
+    paddingTop: 0,
   },
   addTierButton: {
     flexDirection: 'row',
@@ -404,6 +449,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#666',
     width: '30%',
+    textAlign: 'center',
   },
   totalHeader: {
     textAlign: 'right',

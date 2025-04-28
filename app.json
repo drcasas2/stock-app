@@ -39,7 +39,13 @@
     "experiments": {
       "typedRoutes": true
     },
-    "owner": "your-expo-username",
-    "privacy": "unlisted"
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "b6c028a5-eabc-4a5b-8b34-891670ea2025"
+      }
+    }
   }
 }

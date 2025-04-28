@@ -16,6 +16,7 @@ interface TierRowProps {
   onUpdateTier: (id: string, stockPrice: string, quantity: string) => void;
   onToggleVisibility: (id: string) => void;
   onDelete: (id: string) => void;
+  onInputFocus: (id: string) => void;
 }
 
 const formatNumberInput = (value: string): string => {
@@ -43,6 +44,7 @@ export default function TierRow({
   onUpdateTier,
   onToggleVisibility,
   onDelete,
+  onInputFocus,
 }: TierRowProps) {
   const [localStockPrice, setLocalStockPrice] = useState(stockPrice);
   const [localQuantity, setLocalQuantity] = useState(quantity);
@@ -93,6 +95,15 @@ export default function TierRow({
     onUpdateTier(id, stockPrice, rawValue);
   };
 
+  // Add handlers for input focus
+  const handleStockPriceFocus = () => {
+    onInputFocus(id);
+  };
+
+  const handleQuantityFocus = () => {
+    onInputFocus(id);
+  };
+
   return (
     <Animated.View style={[
       styles.tierRow,
@@ -125,6 +136,7 @@ export default function TierRow({
           returnKeyType="done"
           onSubmitEditing={Keyboard.dismiss}
           enablesReturnKeyAutomatically={true}
+          onFocus={handleStockPriceFocus}
         />
         <TextInput
           style={[styles.tierInput, !isVisible && styles.tierInputDisabled]}
@@ -137,6 +149,7 @@ export default function TierRow({
           returnKeyType="done"
           onSubmitEditing={Keyboard.dismiss}
           enablesReturnKeyAutomatically={true}
+          onFocus={handleQuantityFocus}
         />
         <Text style={[styles.tierTotal, !isVisible && styles.tierTotalDisabled]}>
           {calculateTotalCost()}

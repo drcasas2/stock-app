@@ -14,7 +14,7 @@ export default function RootLayout() {
         name="tier-sim" 
         options={{
           title: "Tier Simulator",
-          headerShown: true
+          headerShown: false
         }} 
       />
     </Stack>

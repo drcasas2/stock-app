@@ -1,4 +1,4 @@
-import { StyleSheet, Text, View, SafeAreaView, TextInput, Keyboard, TouchableWithoutFeedback, ScrollView, Pressable, LayoutAnimation, Platform, UIManager, KeyboardAvoidingView, Animated, Dimensions, findNodeHandle } from "react-native";
+import { StyleSheet, Text, View, SafeAreaView, TextInput, Keyboard, TouchableWithoutFeedback, Pressable, LayoutAnimation, Platform, UIManager, KeyboardAvoidingView, Animated, FlatList } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { useState, useEffect, useMemo, useRef } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -23,7 +23,10 @@ export default function TierSimScreen() {
   // Top-level state
   const [cashBalance, setCashBalance] = useState<string>('');
   const [projectedPrice, setProjectedPrice] = useState<string>('');
-  
+  const [tiers, setTiers] = useState<Tier[]>([]);
+  const flatListRef = useRef<FlatList>(null);
+  const scrollY = useRef(new Animated.Value(0)).current;
+
   // Formatted display values
   const formattedCashBalance = useMemo(() => {
     return cashBalance ? 
@@ -54,15 +57,6 @@ export default function TierSimScreen() {
     remainingBalance: 0,
   });
 
-  // Add new state for tiers
-  const [tiers, setTiers] = useState<Tier[]>([]);
-
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
-  const [scrollViewHeight, setScrollViewHeight] = useState(0);
-  const scrollViewRef = useRef<ScrollView>(null);
-  const scrollY = useRef(new Animated.Value(0)).current;
-  const tierRowRefs = useRef<{ [key: string]: View | null }>({});
-
   // Load saved values when component mounts
   useEffect(() => {
     loadSavedValues();
@@ -78,7 +72,6 @@ export default function TierSimScreen() {
       if (savedProjectedPrice) setProjectedPrice(savedProjectedPrice);
       if (savedTiers) {
          const parsedTiers = JSON.parse(savedTiers);
-         // Ensure isVisible defaults to true if missing from storage
          setTiers(parsedTiers.map((t: Partial<Tier> & {id: string}) => ({
              ...t,
              stockPrice: t.stockPrice || '',
@@ -86,12 +79,10 @@ export default function TierSimScreen() {
              isVisible: t.isVisible !== undefined ? t.isVisible : true,
          })));
       } else {
-        // Initialize with one empty tier if nothing is saved
         handleAddTier();
       }
     } catch (error) {
       console.error('Error loading saved values:', error);
-      // Initialize with one empty tier on error
       handleAddTier();
     }
   };
@@ -126,7 +117,6 @@ export default function TierSimScreen() {
       quantity: '',
       isVisible: true,
     };
-    // Prepend new tier to the top for better UX
     const updatedTiers = [newTier, ...tiers];
     setTiers(updatedTiers);
     AsyncStorage.setItem('tiers', JSON.stringify(updatedTiers));
@@ -149,110 +139,29 @@ export default function TierSimScreen() {
   };
 
   const handleDeleteTier = (id: string) => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut); // Use simple preset
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     const updatedTiers = tiers.filter(tier => tier.id !== id);
     setTiers(updatedTiers);
     AsyncStorage.setItem('tiers', JSON.stringify(updatedTiers));
   };
 
-  // --- Keyboard and Scrolling Logic ---
-  useEffect(() => {
-    const keyboardDidShowListener = Keyboard.addListener(
-      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow', // Use willShow on iOS for better timing
-      (e) => {
-        setKeyboardHeight(e.endCoordinates.height);
-      }
-    );
-    const keyboardDidHideListener = Keyboard.addListener(
-      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
-      () => {
-        setKeyboardHeight(0);
-      }
-    );
+  // Scroll handler for Tier focus
+  const handleTierFocus = (tierId: string) => {
+    if (!flatListRef.current) return;
 
-    return () => {
-      keyboardDidShowListener.remove();
-      keyboardDidHideListener.remove();
-    };
-  }, []);
+    // Find index in the main data array (inputs + calculations + tiers)
+    const tierIndexInData = data.findIndex(item => !('type' in item) && (item as Tier).id === tierId);
 
-  const handleTierInputFocus = (tierId: string) => {
-    const tierNode = tierRowRefs.current[tierId];
-    const scrollViewNode = scrollViewRef.current;
-
-    // Check if nodes exist and keyboard is actually visible and ScrollView has height
-    if (tierNode && scrollViewNode && keyboardHeight > 0 && scrollViewHeight > 0) {
-      const nativeTierNodeHandle = findNodeHandle(tierNode);
-      const nativeScrollViewNodeHandle = findNodeHandle(scrollViewNode);
-
-      // Ensure node handles are valid before measuring
-      if (nativeTierNodeHandle && nativeScrollViewNodeHandle) {
-        // Use setTimeout to allow layout to stabilize after keyboard appears/scrolls
-        setTimeout(() => {
-          UIManager.measureLayout(
-            nativeTierNodeHandle,        // Node to measure
-            nativeScrollViewNodeHandle,  // Ancestor to measure relative to
-            (error) => { console.error("UIManager.measureLayout failed:", error); }, // Error callback
-            (x, y, width, height) => { // Success callback (x, y relative to ScrollView content)
-              
-              // --- CONFIGURATION ---
-              // Adjust this value for the desired space between the input row and the keyboard
-              const PADDING_ABOVE_KEYBOARD = 10; // <--- EDIT THIS PADDING VALUE (e.g., 5, 10, 15)
-              // --- END CONFIGURATION ---
-
-              const currentScrollY = scrollY._value || 0;
-
-              // Calculate the Row's absolute top/bottom positions within the ScrollView's content
-              const rowAbsoluteTop = y;
-              const rowAbsoluteBottom = y + height;
-
-              // Calculate the boundaries of the currently visible area within the ScrollView frame
-              const visibleAreaTopY = currentScrollY; // Top of the viewport corresponds to current scroll offset
-              const visibleAreaBottomY = currentScrollY + scrollViewHeight - keyboardHeight; // Top of keyboard
-
-              // --- Check if the Row is Already Fully Visible ---
-              // Is the row's top edge below the visible top AND the row's bottom edge above the visible bottom?
-              // Add a small tolerance (e.g., 1 pixel) for potential floating point rounding issues
-              const isFullyVisible = 
-                  rowAbsoluteTop >= visibleAreaTopY - 1 && 
-                  rowAbsoluteBottom <= visibleAreaBottomY + 1;
-
-              // --- Only Scroll if NOT Already Fully Visible ---
-              if (!isFullyVisible) {
-                let scrollToY: number | null = null;
-
-                // Check if the bottom of the row is hidden below the keyboard
-                if (rowAbsoluteBottom > visibleAreaBottomY) {
-                  // Calculate the scroll position needed to place the row's bottom edge
-                  // exactly PADDING_ABOVE_KEYBOARD pixels above the keyboard top (visibleAreaBottomY)
-                  scrollToY = rowAbsoluteBottom - (scrollViewHeight - keyboardHeight) + PADDING_ABOVE_KEYBOARD;
-
-                // Check if the top of the row is hidden above the current view
-                } else if (rowAbsoluteTop < visibleAreaTopY) {
-                   // Calculate the scroll position needed to bring the row's top edge into view
-                   // (We'll scroll it just to the top edge, could add padding if desired)
-                   scrollToY = rowAbsoluteTop;
-                }
-                
-                // Ensure scrollToY is calculated and is different from current scroll
-                // (Avoids redundant scrolls if calculation somehow results in current position)
-                // Also ensure we don't scroll past the top (less than 0)
-                if (scrollToY !== null && Math.abs(scrollToY - currentScrollY) > 1) {
-                   scrollViewRef.current?.scrollTo({ y: Math.max(0, scrollToY), animated: true });
-                }
-              }
-              // else { console.log("Row already visible. No scroll needed."); }
-            }
-          );
-        }, Platform.OS === 'android' ? 100 : 0); // Delay for measurement stability
-      } else {
-          console.warn("Could not find native handles for measurement in handleTierInputFocus.");
-      }
+    if (tierIndexInData !== -1) {
+      flatListRef.current.scrollToIndex({ 
+        index: tierIndexInData, 
+        animated: true, 
+        viewPosition: 0 // Position item at the top of the visible area
+      });
     }
   };
-  // --- End Keyboard and Scrolling Logic ---
 
-  // Calculate all values whenever tiers, cashBalance, or projectedPrice changes
+  // Calculate values
   useEffect(() => {
     const calculateValues = () => {
       const totalCash = parseFloat(cashBalance) / 100 || 0;
@@ -286,213 +195,205 @@ export default function TierSimScreen() {
     calculateValues();
   }, [tiers, cashBalance, projectedPrice]);
 
-  // Animate Font Size
+  // Header animations
   const headerFontSize = scrollY.interpolate({
     inputRange: [0, 100],
-    outputRange: [24, 18], // Start larger, end smaller (adjust as needed)
+    outputRange: [24, 18],
     extrapolate: 'clamp'
   });
-  
-  // Animate Header Padding (Split into Top and Bottom)
+
   const headerPaddingTop = scrollY.interpolate({
-    inputRange: [0, 100 * 0.75], // Match previous timing
-    outputRange: [20, 0], // Start with 20, end with 0
+    inputRange: [0, 100 * 0.75],
+    outputRange: [20, 0],
     extrapolate: 'clamp'
   });
 
   const headerPaddingBottom = scrollY.interpolate({
-    inputRange: [0, 100 * 0.75], // Match previous timing
-    outputRange: [20, 10], // Start with 20, end with 10
+    inputRange: [0, 100 * 0.75],
+    outputRange: [20, 10],
     extrapolate: 'clamp'
   });
 
-  // Animate Bottom Margin (reduce bottom margin to tighten space)
   const headerMarginBottom = scrollY.interpolate({
     inputRange: [0, 100],
-    outputRange: [10, 0], // Reduce margin below title (adjust as needed)
+    outputRange: [10, 0],
     extrapolate: 'clamp'
   });
+
+  // FlatList data
+  const data = [{ type: 'inputs' }, { type: 'calculations' }, ...tiers];
 
   return (
     <KeyboardAvoidingView 
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={styles.container}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 60 : 0}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 10 : 0}
     >
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
         <SafeAreaView style={styles.container}>
-          {/* Apply Padding to the Header View */}
           <Animated.View style={[
             styles.header,
             {
-              paddingTop: headerPaddingTop, // Use separate top padding
-              paddingBottom: headerPaddingBottom, // Use separate bottom padding
+              paddingTop: headerPaddingTop,
+              paddingBottom: headerPaddingBottom,
             }
           ]}>
-            {/* Apply Font Size and Margin to the Header Text */}
             <Animated.Text style={[
               styles.headerTitle,
               {
-                fontSize: headerFontSize, // Animated font size
-                marginBottom: headerMarginBottom // Animated margin
+                fontSize: headerFontSize,
+                marginBottom: headerMarginBottom
               }
             ]}>
               Tier Simulator
             </Animated.Text>
-            {/* Add Link to Settings */} 
-            {/* @ts-ignore // Ignore Href type mismatch until router types update */}
             {/* <Link href={'/settings'} style={styles.settingsLink}>
               <Text>Go to Settings</Text>
             </Link> */}
           </Animated.View>
 
-          {/* Main container that scrolls until calculations section */}
-          <ScrollView
-            ref={scrollViewRef}
+          <FlatList
+            ref={flatListRef}
             style={styles.mainScrollView}
+            ListHeaderComponent={
+              null
+            }
+            data={data}
+            renderItem={({ item, index }) => {
+              if ('type' in item && item.type === 'inputs') {
+                return (
+                  <View style={styles.inputSection}>
+                    <View style={styles.inputContainer}>
+                      <Text style={styles.inputLabel}>Total Cash to Invest:</Text>
+                      <TextInput
+                        style={styles.input}
+                        placeholder="Enter total cash amount"
+                        placeholderTextColor="#666"
+                        keyboardType="numeric"
+                        value={formatNumberInput(cashBalance)}
+                        onChangeText={handleCashBalanceChange}
+                        returnKeyType="done"
+                        onSubmitEditing={() => Keyboard.dismiss()}
+                        enablesReturnKeyAutomatically={true}
+                      />
+                    </View>
+                    <View style={styles.inputContainer}>
+                      <Text style={styles.inputLabel}>Projected Price:</Text>
+                      <TextInput
+                        style={styles.input}
+                        placeholder="Enter projected price"
+                        placeholderTextColor="#666"
+                        keyboardType="numeric"
+                        value={formatNumberInput(projectedPrice)}
+                        onChangeText={handleProjectedPriceChange}
+                        returnKeyType="done"
+                        onSubmitEditing={() => Keyboard.dismiss()}
+                        enablesReturnKeyAutomatically={true}
+                      />
+                    </View>
+                  </View>
+                );
+              } else if ('type' in item && item.type === 'calculations') {
+                return (
+                  <View style={styles.fixedSection}>
+                    <View style={styles.calculationsContainer}>
+                      <View style={styles.calculationRow}>
+                        <Text style={styles.calculationLabel}>Remaining Cash Balance:</Text>
+                        <Text style={styles.calculationValue}>
+                          {new Intl.NumberFormat('en-US', {
+                            style: 'currency',
+                            currency: 'USD',
+                          }).format(calculations.remainingBalance)}
+                        </Text>
+                      </View>
+                      <View style={[styles.calculationRow, styles.divider]} />
+                      <View style={styles.calculationRow}>
+                        <Text style={styles.calculationLabel}>Average Share Price:</Text>
+                        <Text style={styles.calculationValue}>
+                          {new Intl.NumberFormat('en-US', {
+                            style: 'currency',
+                            currency: 'USD',
+                          }).format(calculations.averageSharePrice)}
+                        </Text>
+                      </View>
+                      <View style={styles.calculationRow}>
+                        <Text style={styles.calculationLabel}>Potential Dollar Gain:</Text>
+                        <Text style={styles.calculationValue}>
+                          {new Intl.NumberFormat('en-US', {
+                            style: 'currency',
+                            currency: 'USD',
+                          }).format(calculations.potentialGain)}
+                        </Text>
+                      </View>
+                      <View style={styles.calculationRow}>
+                        <Text style={styles.calculationLabel}>Potential Percentage Gain:</Text>
+                        <Text style={styles.calculationValue}>
+                          {calculations.potentialPercentage.toFixed(2)}%
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={styles.stickyTiersHeader}>
+                      <View style={styles.tiersSectionHeader}>
+                        <Text style={styles.tiersSectionTitle}>Purchase Tiers</Text>
+                        <Pressable 
+                          style={styles.addTierButton}
+                          onPress={handleAddTier}
+                        >
+                          <Ionicons name="add-circle-outline" size={24} color="#007AFF" />
+                          <Text style={styles.addTierText}>Add Tier</Text>
+                        </Pressable>
+                      </View>
+                      <View style={styles.columnHeaders}>
+                        <View style={styles.visibilityColumn}>
+                          <Text style={styles.columnHeader}></Text>
+                        </View>
+                        <View style={styles.tierInputColumns}>
+                          <Text style={styles.columnHeader}>Price</Text>
+                          <Text style={styles.columnHeader}>Quantity</Text>
+                          <Text style={[styles.columnHeader, styles.totalHeader]}>Total Cost</Text>
+                        </View>
+                        <View style={styles.deleteColumn}>
+                          <Text style={styles.columnHeader}></Text>
+                        </View>
+                      </View>
+                    </View>
+                  </View>
+                );
+              } else {
+                // Ensure item is treated as Tier here
+                const tierItem = item as Tier;
+                return (
+                  <TierRow
+                    key={tierItem.id}
+                    id={tierItem.id}
+                    stockPrice={tierItem.stockPrice}
+                    quantity={tierItem.quantity}
+                    isVisible={tierItem.isVisible}
+                    onUpdateTier={handleUpdateTier}
+                    onToggleVisibility={handleToggleVisibility}
+                    onDelete={handleDeleteTier}
+                    onFocusProp={handleTierFocus}
+                  />
+                );
+              }
+            }}
+            keyExtractor={(item, index) => {
+              if ('type' in item) {
+                 return `${item.type}-${index}`;
+              }
+              // If it's not a typed object, assume it's a Tier and use its id
+              const tierItem = item as Tier;
+              return tierItem.id;
+            }}
             stickyHeaderIndices={[1]}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="interactive"
             scrollEventThrottle={16}
             onScroll={Animated.event(
               [{ nativeEvent: { contentOffset: { y: scrollY } } }],
-              { useNativeDriver: false } // Must be false for layout props like padding/margin
+              { useNativeDriver: false }
             )}
-            onLayout={(event) => {
-              const { height } = event.nativeEvent.layout;
-              setScrollViewHeight(height);
-            }}
-            contentContainerStyle={{ paddingBottom: keyboardHeight > 0 ? keyboardHeight : 20 }}
-          >
-            {/* Header and Input Fields */}
-            <View>
-              <View style={styles.inputSection}>
-                <View style={styles.inputContainer}>
-                  <Text style={styles.inputLabel}>Total Cash to Invest:</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Enter total cash amount"
-                    placeholderTextColor="#666"
-                    keyboardType="numeric"
-                    value={formatNumberInput(cashBalance)}
-                    onChangeText={handleCashBalanceChange}
-                    returnKeyType="done"
-                    onSubmitEditing={() => Keyboard.dismiss()}
-                    enablesReturnKeyAutomatically={true}
-                  />
-                </View>
-                <View style={styles.inputContainer}>
-                  <Text style={styles.inputLabel}>Projected Price:</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Enter projected price"
-                    placeholderTextColor="#666"
-                    keyboardType="numeric"
-                    value={formatNumberInput(projectedPrice)}
-                    onChangeText={handleProjectedPriceChange}
-                    returnKeyType="done"
-                    onSubmitEditing={() => Keyboard.dismiss()}
-                    enablesReturnKeyAutomatically={true}
-                  />
-                </View>
-              </View>
-            </View>
-
-            {/* Fixed Calculations and Tiers Header */}
-            <View style={styles.fixedSection}>
-              <View style={styles.calculationsContainer}>
-                {/* New Remaining Cash Balance Row */}
-                <View style={styles.calculationRow}>
-                  <Text style={styles.calculationLabel}>Remaining Cash Balance:</Text>
-                  <Text style={styles.calculationValue}>
-                    {new Intl.NumberFormat('en-US', {
-                      style: 'currency',
-                      currency: 'USD',
-                    }).format(calculations.remainingBalance)}
-                  </Text>
-                </View>
-                
-                <View style={[styles.calculationRow, styles.divider]} />
-
-                <View style={styles.calculationRow}>
-                  <Text style={styles.calculationLabel}>Average Share Price:</Text>
-                  <Text style={styles.calculationValue}>
-                    {new Intl.NumberFormat('en-US', {
-                      style: 'currency',
-                      currency: 'USD',
-                    }).format(calculations.averageSharePrice)}
-                  </Text>
-                </View>
-                <View style={styles.calculationRow}>
-                  <Text style={styles.calculationLabel}>Potential Dollar Gain:</Text>
-                  <Text style={styles.calculationValue}>
-                    {new Intl.NumberFormat('en-US', {
-                      style: 'currency',
-                      currency: 'USD',
-                    }).format(calculations.potentialGain)}
-                  </Text>
-                </View>
-                <View style={styles.calculationRow}>
-                  <Text style={styles.calculationLabel}>Potential Percentage Gain:</Text>
-                  <Text style={styles.calculationValue}>
-                    {calculations.potentialPercentage.toFixed(2)}%
-                  </Text>
-                </View>
-              </View>
-
-              <View style={styles.stickyTiersHeader}>
-                <View style={styles.tiersSectionHeader}>
-                  <Text style={styles.tiersSectionTitle}>Purchase Tiers</Text>
-                  <Pressable 
-                    style={styles.addTierButton}
-                    onPress={handleAddTier}
-                  >
-                    <Ionicons name="add-circle-outline" size={24} color="#007AFF" />
-                    <Text style={styles.addTierText}>Add Tier</Text>
-                  </Pressable>
-                </View>
-                <View style={styles.columnHeaders}>
-                  <View style={styles.visibilityColumn}>
-                    <Text style={styles.columnHeader}></Text>
-                  </View>
-                  <View style={styles.tierInputColumns}>
-                    <Text style={styles.columnHeader}>Price</Text>
-                    <Text style={styles.columnHeader}>Quantity</Text>
-                    <Text style={[styles.columnHeader, styles.totalHeader]}>Total Cost</Text>
-                  </View>
-                  <View style={styles.deleteColumn}>
-                    <Text style={styles.columnHeader}></Text>
-                  </View>
-                </View>
-              </View>
-            </View>
-
-            {/* Tiers List ScrollView*/}
-            <ScrollView
-              ref={scrollViewRef} // Keep ref if needed for focusing, might need adjustment
-              style={styles.tiersListScrollView} // New style
-              keyboardShouldPersistTaps="handled"
-              keyboardDismissMode="on-drag"
-            >
-              <View style={styles.tierList}>
-                {tiers.map((tier) => (
-                  <TierRow
-                    ref={(el) => (tierRowRefs.current[tier.id] = el)}
-                    key={tier.id}
-                    id={tier.id}
-                    stockPrice={tier.stockPrice}
-                    quantity={tier.quantity}
-                    isVisible={tier.isVisible}
-                    totalCost="$0.00" // Note: This calculation might need adjustment if done in TierRow
-                    onUpdateTier={handleUpdateTier}
-                    onToggleVisibility={handleToggleVisibility}
-                    onDelete={handleDeleteTier}
-                    onInputFocus={handleTierInputFocus} // This focus logic might need review
-                  />
-                ))}
-              </View>
-            </ScrollView>
-          </ScrollView>
+          />
         </SafeAreaView>
       </TouchableWithoutFeedback>
     </KeyboardAvoidingView>
@@ -505,16 +406,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
   },
   header: {
-    paddingHorizontal: 20, // Keep static horizontal padding
+    paddingHorizontal: 20,
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
-    backgroundColor: '#fff', // Ensure background for overlap
-    zIndex: 10 // Keep header above content during animation
+    backgroundColor: '#fff',
+    zIndex: 10
   },
   headerTitle: {
-    // fontSize: 28, // Initial size set by animation
     fontWeight: 'bold',
-    // marginBottom: 10, // Initial margin set by animation
     textAlign: 'center',
   },
   inputContainer: {
@@ -559,10 +458,6 @@ const styles = StyleSheet.create({
     borderBottomColor: '#ddd',
     marginVertical: 10,
   },
-  tiersSection: {
-    flex: 1,
-    backgroundColor: '#fff',
-  },
   tiersSectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -574,14 +469,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#333',
     marginLeft: 20,
-  },
-  tierListContainer: {
-    flex: 1,
-  },
-  tierList: {
-    paddingHorizontal: 20, // Keep horizontal padding consistent
-    paddingTop: 10,
-    paddingBottom: 20, // Add padding at the bottom of the list
   },
   addTierButton: {
     flexDirection: 'row',
@@ -602,10 +489,10 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   visibilityColumn: {
-    width: 34, // Match the width of the visibility button
+    width: 34,
   },
   deleteColumn: {
-    width: 34, // Match the width of the delete button
+    width: 34,
   },
   tierInputColumns: {
     flex: 1,
@@ -613,7 +500,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginHorizontal: 10,
-    paddingRight: 8, // Add padding to align with TierRow inputs
+    paddingRight: 8,
   },
   columnHeader: {
     fontSize: 14,
@@ -624,7 +511,7 @@ const styles = StyleSheet.create({
   },
   totalHeader: {
     textAlign: 'right',
-    paddingRight: 8, // Adjust the Total Cost alignment
+    paddingRight: 8,
   },
   mainScrollView: {
     flex: 1,
@@ -634,28 +521,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 20,
   },
-  stickyHeader: {
-    backgroundColor: '#fff',
-    zIndex: 1,
-    // Add shadow for better visual separation
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 3,
-  },
   stickyTiersHeader: {
     backgroundColor: '#fff',
     zIndex: 1,
-    paddingHorizontal: 15, // Keep horizontal padding
-    paddingTop: 15, // Add padding if needed
-    paddingBottom: 10, // Add padding if needed
+    paddingHorizontal: 15,
+    paddingTop: 15,
+    paddingBottom: 10,
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
-    // Add shadow for better visual separation if desired (copied from previous attempt)
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -665,14 +538,10 @@ const styles = StyleSheet.create({
   fixedSection: {
     backgroundColor: '#fff',
   },
-  tiersListScrollView: { // New style for the tiers ScrollView
-    flex: 1, // Allows it to take remaining space
-    backgroundColor: '#fff', // Match background
-  },
   settingsLink: {
-    position: 'absolute', // Position independently within the header
+    position: 'absolute',
     right: 20,
-    top: 25, // Adjust based on padding/appearance
+    top: 25,
     padding: 5,
   },
-}); 
+});

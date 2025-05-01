@@ -15,7 +15,7 @@ interface TierRowProps {
   onUpdateTier: (id: string, stockPrice: string, quantity: string) => void;
   onToggleVisibility: (id: string) => void;
   onDelete: (id: string) => void;
-  onInputFocus: (id: string) => void;
+  onFocusProp: (id: string) => void;
 }
 
 const formatNumberInput = (value: string): string => {
@@ -43,8 +43,8 @@ const TierRow = forwardRef((
     onUpdateTier,
     onToggleVisibility,
     onDelete,
-    onInputFocus,
-  }: Omit<TierRowProps, 'totalCost'>,
+    onFocusProp,
+  }: TierRowProps,
   ref
 ) => {
   const [localStockPrice, setLocalStockPrice] = useState(stockPrice);
@@ -89,10 +89,6 @@ const TierRow = forwardRef((
     onUpdateTier(id, localStockPrice, rawValue);
   };
 
-  const handleFocus = () => {
-    onInputFocus(id);
-  };
-
   return (
     <View ref={componentRef} style={styles.tierRow}>
       <Pressable
@@ -118,7 +114,7 @@ const TierRow = forwardRef((
           returnKeyType="done"
           onSubmitEditing={Keyboard.dismiss}
           enablesReturnKeyAutomatically={true}
-          onFocus={handleFocus}
+          onFocus={() => onFocusProp(id)}
         />
         <TextInput
           style={[styles.tierInput, !isVisible && styles.tierInputDisabled]}
@@ -131,7 +127,7 @@ const TierRow = forwardRef((
           returnKeyType="done"
           onSubmitEditing={Keyboard.dismiss}
           enablesReturnKeyAutomatically={true}
-          onFocus={handleFocus}
+          onFocus={() => onFocusProp(id)}
         />
         <Text style={[styles.tierTotal, !isVisible && styles.tierTotalDisabled]}>
           {calculatedTotalCost}

@@ -1,6 +1,6 @@
-import { StyleSheet, Text, View, TextInput, Pressable, Keyboard, Animated, LayoutAnimation, Platform, UIManager } from "react-native";
+import React, { useState, useEffect, useMemo, forwardRef, useRef, useImperativeHandle } from "react";
+import { StyleSheet, Text, View, TextInput, Pressable, Keyboard, Animated, Platform, UIManager } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useState, useEffect } from "react";
 
 // Enable LayoutAnimation for Android
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -12,7 +12,6 @@ interface TierRowProps {
   stockPrice: string;
   quantity: string;
   isVisible: boolean;
-  totalCost: string;
   onUpdateTier: (id: string, stockPrice: string, quantity: string) => void;
   onToggleVisibility: (id: string) => void;
   onDelete: (id: string) => void;
@@ -32,87 +31,70 @@ const formatNumberInput = (value: string): string => {
   return new Intl.NumberFormat('en-US', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  }).format(number);
+  }).format(number || 0);
 };
 
-export default function TierRow({
-  id,
-  stockPrice,
-  quantity,
-  isVisible,
-  totalCost,
-  onUpdateTier,
-  onToggleVisibility,
-  onDelete,
-  onInputFocus,
-}: TierRowProps) {
+const TierRow = forwardRef((
+  {
+    id,
+    stockPrice,
+    quantity,
+    isVisible,
+    onUpdateTier,
+    onToggleVisibility,
+    onDelete,
+    onInputFocus,
+  }: Omit<TierRowProps, 'totalCost'>,
+  ref
+) => {
   const [localStockPrice, setLocalStockPrice] = useState(stockPrice);
   const [localQuantity, setLocalQuantity] = useState(quantity);
-  const [slideAnim] = useState(new Animated.Value(-50)); // Start from above
+  const componentRef = useRef<View>(null);
 
-  // Slide down animation when component mounts
+  useImperativeHandle(ref, () => componentRef.current);
+
   useEffect(() => {
-    Animated.spring(slideAnim, {
-      toValue: 0,
-      tension: 50,
-      friction: 10,
-      useNativeDriver: true,
-    }).start();
-  }, []);
+    setLocalStockPrice(stockPrice);
+  }, [stockPrice]);
 
-  // Calculate total cost
-  const calculateTotalCost = (): string => {
+  useEffect(() => {
+    setLocalQuantity(quantity);
+  }, [quantity]);
+
+  const calculatedTotalCost = useMemo(() => {
     if (!localStockPrice || !localQuantity) return '$0.00';
-    
-    // Convert price from cents to dollars (divide by 100)
-    const priceInDollars = parseFloat(localStockPrice) / 100;
-    // Convert quantity to number
-    const quantityNumber = parseInt(localQuantity, 10);
-    
-    // Calculate total
-    const total = priceInDollars * quantityNumber;
 
-    // Format as currency
+    const priceNum = parseFloat(localStockPrice) / 100 || 0;
+    const quantityNum = parseInt(localQuantity, 10) || 0;
+
+    const total = priceNum * quantityNum;
+
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: 'USD',
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     }).format(total);
-  };
+  }, [localStockPrice, localQuantity]);
 
   const handleStockPriceChange = (text: string) => {
-    // Remove all non-numeric characters
     const rawValue = text.replace(/[^0-9]/g, '');
     setLocalStockPrice(rawValue);
-    onUpdateTier(id, rawValue, quantity);
+    onUpdateTier(id, rawValue, localQuantity);
   };
 
   const handleQuantityChange = (text: string) => {
-    // Remove all non-numeric characters
     const rawValue = text.replace(/[^0-9]/g, '');
     setLocalQuantity(rawValue);
-    onUpdateTier(id, stockPrice, rawValue);
+    onUpdateTier(id, localStockPrice, rawValue);
   };
 
-  // Add handlers for input focus
-  const handleStockPriceFocus = () => {
-    onInputFocus(id);
-  };
-
-  const handleQuantityFocus = () => {
+  const handleFocus = () => {
     onInputFocus(id);
   };
 
   return (
-    <Animated.View style={[
-      styles.tierRow,
-      {
-        transform: [{
-          translateY: slideAnim
-        }]
-      },
-    ]}>
+    <View ref={componentRef} style={styles.tierRow}>
       <Pressable
         style={styles.visibilityButton}
         onPress={() => onToggleVisibility(id)}
@@ -136,7 +118,7 @@ export default function TierRow({
           returnKeyType="done"
           onSubmitEditing={Keyboard.dismiss}
           enablesReturnKeyAutomatically={true}
-          onFocus={handleStockPriceFocus}
+          onFocus={handleFocus}
         />
         <TextInput
           style={[styles.tierInput, !isVisible && styles.tierInputDisabled]}
@@ -149,10 +131,10 @@ export default function TierRow({
           returnKeyType="done"
           onSubmitEditing={Keyboard.dismiss}
           enablesReturnKeyAutomatically={true}
-          onFocus={handleQuantityFocus}
+          onFocus={handleFocus}
         />
         <Text style={[styles.tierTotal, !isVisible && styles.tierTotalDisabled]}>
-          {calculateTotalCost()}
+          {calculatedTotalCost}
         </Text>
       </View>
 
@@ -162,9 +144,11 @@ export default function TierRow({
       >
         <Ionicons name="trash-outline" size={24} color="#FF3B30" />
       </Pressable>
-    </Animated.View>
+    </View>
   );
-}
+});
+
+export default TierRow;
 
 const styles = StyleSheet.create({
   tierRow: {
@@ -174,28 +158,32 @@ const styles = StyleSheet.create({
     paddingHorizontal: 15,
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
+    backgroundColor: '#fff',
   },
   visibilityButton: {
     padding: 5,
+    marginRight: 5,
   },
   deleteButton: {
     padding: 5,
+    marginLeft: 5,
   },
   tierInputs: {
     flex: 1,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginHorizontal: 10,
   },
   tierInput: {
     borderWidth: 1,
     borderColor: '#ccc',
     borderRadius: 6,
-    padding: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
     width: '30%',
     fontSize: 16,
     backgroundColor: '#fff',
+    textAlign: 'right',
   },
   tierInputDisabled: {
     backgroundColor: '#f5f5f5',
@@ -207,6 +195,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     width: '30%',
     textAlign: 'right',
+    paddingHorizontal: 5,
   },
   tierTotalDisabled: {
     color: '#999',

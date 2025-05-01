@@ -1,4 +1,4 @@
-import { StyleSheet, Text, View, SafeAreaView, TextInput, Keyboard, TouchableWithoutFeedback, ScrollView, Pressable, LayoutAnimation, Platform, UIManager, KeyboardAvoidingView, Animated, Dimensions } from "react-native";
+import { StyleSheet, Text, View, SafeAreaView, TextInput, Keyboard, TouchableWithoutFeedback, ScrollView, Pressable, LayoutAnimation, Platform, UIManager, KeyboardAvoidingView, Animated, Dimensions, findNodeHandle } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { useState, useEffect, useMemo, useRef } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -57,6 +57,12 @@ export default function TierSimScreen() {
   // Add new state for tiers
   const [tiers, setTiers] = useState<Tier[]>([]);
 
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const [scrollViewHeight, setScrollViewHeight] = useState(0);
+  const scrollViewRef = useRef<ScrollView>(null);
+  const scrollY = useRef(new Animated.Value(0)).current;
+  const tierRowRefs = useRef<{ [key: string]: View | null }>({});
+
   // Load saved values when component mounts
   useEffect(() => {
     loadSavedValues();
@@ -70,43 +76,48 @@ export default function TierSimScreen() {
       
       if (savedCashBalance) setCashBalance(savedCashBalance);
       if (savedProjectedPrice) setProjectedPrice(savedProjectedPrice);
-      if (savedTiers) setTiers(JSON.parse(savedTiers));
+      if (savedTiers) {
+         const parsedTiers = JSON.parse(savedTiers);
+         // Ensure isVisible defaults to true if missing from storage
+         setTiers(parsedTiers.map((t: Partial<Tier> & {id: string}) => ({
+             ...t,
+             stockPrice: t.stockPrice || '',
+             quantity: t.quantity || '',
+             isVisible: t.isVisible !== undefined ? t.isVisible : true,
+         })));
+      } else {
+        // Initialize with one empty tier if nothing is saved
+        handleAddTier();
+      }
     } catch (error) {
       console.error('Error loading saved values:', error);
+      // Initialize with one empty tier on error
+      handleAddTier();
     }
   };
 
   const formatNumberInput = (value: string): string => {
-    // Remove all non-numeric characters
     let cleanValue = value.replace(/[^0-9]/g, '');
-    
-    // Don't format if empty
     if (cleanValue === '') return '';
-    
-    // Convert to number and divide by 100 to handle decimal places
     const number = parseFloat(cleanValue) / 100;
-    
     return new Intl.NumberFormat('en-US', {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
-    }).format(number);
+    }).format(number || 0);
   };
 
   const handleCashBalanceChange = (text: string) => {
-    // Remove all non-numeric characters
     const rawValue = text.replace(/[^0-9]/g, '');
     setCashBalance(rawValue);
     AsyncStorage.setItem('cashBalance', rawValue);
   };
 
   const handleProjectedPriceChange = (text: string) => {
-    // Remove all non-numeric characters
     const rawValue = text.replace(/[^0-9]/g, '');
     setProjectedPrice(rawValue);
     AsyncStorage.setItem('projectedPrice', rawValue);
   };
 
-  // Update handleAddTier to include animation
   const handleAddTier = () => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     const newTier: Tier = {
@@ -115,19 +126,20 @@ export default function TierSimScreen() {
       quantity: '',
       isVisible: true,
     };
-    setTiers([...tiers, newTier]);
+    // Prepend new tier to the top for better UX
+    const updatedTiers = [newTier, ...tiers];
+    setTiers(updatedTiers);
+    AsyncStorage.setItem('tiers', JSON.stringify(updatedTiers));
   };
 
-  // Handler for updating tier values
   const handleUpdateTier = (id: string, stockPrice: string, quantity: string) => {
-    const updatedTiers = tiers.map(tier => 
+    const updatedTiers = tiers.map(tier =>
       tier.id === id ? { ...tier, stockPrice, quantity } : tier
     );
     setTiers(updatedTiers);
     AsyncStorage.setItem('tiers', JSON.stringify(updatedTiers));
   };
 
-  // Handler for toggling tier visibility
   const handleToggleVisibility = (id: string) => {
     const updatedTiers = tiers.map(tier =>
       tier.id === id ? { ...tier, isVisible: !tier.isVisible } : tier
@@ -136,35 +148,115 @@ export default function TierSimScreen() {
     AsyncStorage.setItem('tiers', JSON.stringify(updatedTiers));
   };
 
-  // Update handleDeleteTier to use a custom configuration
   const handleDeleteTier = (id: string) => {
-    LayoutAnimation.configureNext({
-      duration: 300,
-      create: {
-        type: LayoutAnimation.Types.easeInEaseOut,
-        property: LayoutAnimation.Properties.opacity,
-      },
-      update: {
-        type: LayoutAnimation.Types.easeInEaseOut,
-      },
-      delete: {
-        type: LayoutAnimation.Types.easeInEaseOut,
-        property: LayoutAnimation.Properties.opacity,
-      },
-    });
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut); // Use simple preset
     const updatedTiers = tiers.filter(tier => tier.id !== id);
     setTiers(updatedTiers);
     AsyncStorage.setItem('tiers', JSON.stringify(updatedTiers));
   };
 
+  // --- Keyboard and Scrolling Logic ---
+  useEffect(() => {
+    const keyboardDidShowListener = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow', // Use willShow on iOS for better timing
+      (e) => {
+        setKeyboardHeight(e.endCoordinates.height);
+      }
+    );
+    const keyboardDidHideListener = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => {
+        setKeyboardHeight(0);
+      }
+    );
+
+    return () => {
+      keyboardDidShowListener.remove();
+      keyboardDidHideListener.remove();
+    };
+  }, []);
+
+  const handleTierInputFocus = (tierId: string) => {
+    const tierNode = tierRowRefs.current[tierId];
+    const scrollViewNode = scrollViewRef.current;
+
+    // Check if nodes exist and keyboard is actually visible and ScrollView has height
+    if (tierNode && scrollViewNode && keyboardHeight > 0 && scrollViewHeight > 0) {
+      const nativeTierNodeHandle = findNodeHandle(tierNode);
+      const nativeScrollViewNodeHandle = findNodeHandle(scrollViewNode);
+
+      // Ensure node handles are valid before measuring
+      if (nativeTierNodeHandle && nativeScrollViewNodeHandle) {
+        // Use setTimeout to allow layout to stabilize after keyboard appears/scrolls
+        setTimeout(() => {
+          UIManager.measureLayout(
+            nativeTierNodeHandle,        // Node to measure
+            nativeScrollViewNodeHandle,  // Ancestor to measure relative to
+            (error) => { console.error("UIManager.measureLayout failed:", error); }, // Error callback
+            (x, y, width, height) => { // Success callback (x, y relative to ScrollView content)
+              
+              // --- CONFIGURATION ---
+              // Adjust this value for the desired space between the input row and the keyboard
+              const PADDING_ABOVE_KEYBOARD = 10; // <--- EDIT THIS PADDING VALUE (e.g., 5, 10, 15)
+              // --- END CONFIGURATION ---
+
+              const currentScrollY = scrollY._value || 0;
+
+              // Calculate the Row's absolute top/bottom positions within the ScrollView's content
+              const rowAbsoluteTop = y;
+              const rowAbsoluteBottom = y + height;
+
+              // Calculate the boundaries of the currently visible area within the ScrollView frame
+              const visibleAreaTopY = currentScrollY; // Top of the viewport corresponds to current scroll offset
+              const visibleAreaBottomY = currentScrollY + scrollViewHeight - keyboardHeight; // Top of keyboard
+
+              // --- Check if the Row is Already Fully Visible ---
+              // Is the row's top edge below the visible top AND the row's bottom edge above the visible bottom?
+              // Add a small tolerance (e.g., 1 pixel) for potential floating point rounding issues
+              const isFullyVisible = 
+                  rowAbsoluteTop >= visibleAreaTopY - 1 && 
+                  rowAbsoluteBottom <= visibleAreaBottomY + 1;
+
+              // --- Only Scroll if NOT Already Fully Visible ---
+              if (!isFullyVisible) {
+                let scrollToY: number | null = null;
+
+                // Check if the bottom of the row is hidden below the keyboard
+                if (rowAbsoluteBottom > visibleAreaBottomY) {
+                  // Calculate the scroll position needed to place the row's bottom edge
+                  // exactly PADDING_ABOVE_KEYBOARD pixels above the keyboard top (visibleAreaBottomY)
+                  scrollToY = rowAbsoluteBottom - (scrollViewHeight - keyboardHeight) + PADDING_ABOVE_KEYBOARD;
+
+                // Check if the top of the row is hidden above the current view
+                } else if (rowAbsoluteTop < visibleAreaTopY) {
+                   // Calculate the scroll position needed to bring the row's top edge into view
+                   // (We'll scroll it just to the top edge, could add padding if desired)
+                   scrollToY = rowAbsoluteTop;
+                }
+                
+                // Ensure scrollToY is calculated and is different from current scroll
+                // (Avoids redundant scrolls if calculation somehow results in current position)
+                // Also ensure we don't scroll past the top (less than 0)
+                if (scrollToY !== null && Math.abs(scrollToY - currentScrollY) > 1) {
+                   scrollViewRef.current?.scrollTo({ y: Math.max(0, scrollToY), animated: true });
+                }
+              }
+              // else { console.log("Row already visible. No scroll needed."); }
+            }
+          );
+        }, Platform.OS === 'android' ? 100 : 0); // Delay for measurement stability
+      } else {
+          console.warn("Could not find native handles for measurement in handleTierInputFocus.");
+      }
+    }
+  };
+  // --- End Keyboard and Scrolling Logic ---
+
   // Calculate all values whenever tiers, cashBalance, or projectedPrice changes
   useEffect(() => {
     const calculateValues = () => {
-      // Convert string values to numbers
       const totalCash = parseFloat(cashBalance) / 100 || 0;
       const projectedPriceNum = parseFloat(projectedPrice) / 100 || 0;
-      
-      // Calculate values from visible tiers only
       const visibleTiers = tiers.filter(tier => tier.isVisible);
       let totalSpent = 0;
       let totalShares = 0;
@@ -176,20 +268,14 @@ export default function TierSimScreen() {
         totalShares += quantity;
       });
 
-      // Calculate remaining balance
       const remainingBalance = totalCash - totalSpent;
-
-      // Calculate average share price
       const averageSharePrice = totalShares > 0 ? totalSpent / totalShares : 0;
-
-      // Calculate potential gains
       const potentialValue = totalShares * projectedPriceNum;
       const potentialGain = potentialValue - totalSpent;
-      const potentialPercentage = totalSpent > 0 
-        ? ((potentialValue - totalSpent) / totalSpent) * 100 
+      const potentialPercentage = totalSpent > 0
+        ? ((potentialValue - totalSpent) / totalSpent) * 100
         : 0;
 
-      // Update calculations state
       setCalculations({
         averageSharePrice,
         potentialGain,
@@ -197,54 +283,32 @@ export default function TierSimScreen() {
         remainingBalance,
       });
     };
-
     calculateValues();
   }, [tiers, cashBalance, projectedPrice]);
 
-  // Add ref for ScrollView
-  const scrollViewRef = useRef<ScrollView>(null);
-  
-  // Add this new function to handle input focus
-  const handleTierInputFocus = (tierId: string) => {
-    // Find the index of the focused tier
-    const tierIndex = tiers.findIndex(t => t.id === tierId);
-    
-    // Wait for the next frame to ensure the keyboard is shown
-    requestAnimationFrame(() => {
-      scrollViewRef.current?.scrollTo({
-        y: tierIndex * 100, // Approximate height of each TierRow
-        animated: true
-      });
-    });
-  };
-
-  // Add animated value for header title
-  const scrollY = useRef(new Animated.Value(0)).current;
-  const SCROLL_THRESHOLD = 100; // Distance to scroll before animation completes
-
   // Animate Font Size
   const headerFontSize = scrollY.interpolate({
-    inputRange: [0, SCROLL_THRESHOLD],
+    inputRange: [0, 100],
     outputRange: [24, 18], // Start larger, end smaller (adjust as needed)
     extrapolate: 'clamp'
   });
   
   // Animate Header Padding (Split into Top and Bottom)
   const headerPaddingTop = scrollY.interpolate({
-    inputRange: [0, SCROLL_THRESHOLD * 0.75], // Match previous timing
+    inputRange: [0, 100 * 0.75], // Match previous timing
     outputRange: [20, 0], // Start with 20, end with 0
     extrapolate: 'clamp'
   });
 
   const headerPaddingBottom = scrollY.interpolate({
-    inputRange: [0, SCROLL_THRESHOLD * 0.75], // Match previous timing
+    inputRange: [0, 100 * 0.75], // Match previous timing
     outputRange: [20, 10], // Start with 20, end with 10
     extrapolate: 'clamp'
   });
 
   // Animate Bottom Margin (reduce bottom margin to tighten space)
   const headerMarginBottom = scrollY.interpolate({
-    inputRange: [0, SCROLL_THRESHOLD],
+    inputRange: [0, 100],
     outputRange: [10, 0], // Reduce margin below title (adjust as needed)
     extrapolate: 'clamp'
   });
@@ -253,7 +317,7 @@ export default function TierSimScreen() {
     <KeyboardAvoidingView 
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={styles.container}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 25}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 60 : 0}
     >
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
         <SafeAreaView style={styles.container}>
@@ -284,14 +348,21 @@ export default function TierSimScreen() {
 
           {/* Main container that scrolls until calculations section */}
           <ScrollView
+            ref={scrollViewRef}
             style={styles.mainScrollView}
             stickyHeaderIndices={[1]}
             keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="interactive"
             scrollEventThrottle={16}
             onScroll={Animated.event(
               [{ nativeEvent: { contentOffset: { y: scrollY } } }],
               { useNativeDriver: false } // Must be false for layout props like padding/margin
             )}
+            onLayout={(event) => {
+              const { height } = event.nativeEvent.layout;
+              setScrollViewHeight(height);
+            }}
+            contentContainerStyle={{ paddingBottom: keyboardHeight > 0 ? keyboardHeight : 20 }}
           >
             {/* Header and Input Fields */}
             <View>
@@ -406,6 +477,7 @@ export default function TierSimScreen() {
               <View style={styles.tierList}>
                 {tiers.map((tier) => (
                   <TierRow
+                    ref={(el) => (tierRowRefs.current[tier.id] = el)}
                     key={tier.id}
                     id={tier.id}
                     stockPrice={tier.stockPrice}

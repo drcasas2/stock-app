@@ -24,7 +24,6 @@ export default function TierSimScreen() {
   const [cashBalance, setCashBalance] = useState<string>('');
   const [projectedPrice, setProjectedPrice] = useState<string>('');
   const [tiers, setTiers] = useState<Tier[]>([]);
-  const flatListRef = useRef<FlatList>(null);
   const scrollY = useRef(new Animated.Value(0)).current;
 
   // Formatted display values
@@ -117,7 +116,7 @@ export default function TierSimScreen() {
       quantity: '',
       isVisible: true,
     };
-    const updatedTiers = [newTier, ...tiers];
+    const updatedTiers = [...tiers, newTier];
     setTiers(updatedTiers);
     AsyncStorage.setItem('tiers', JSON.stringify(updatedTiers));
   };
@@ -143,22 +142,6 @@ export default function TierSimScreen() {
     const updatedTiers = tiers.filter(tier => tier.id !== id);
     setTiers(updatedTiers);
     AsyncStorage.setItem('tiers', JSON.stringify(updatedTiers));
-  };
-
-  // Scroll handler for Tier focus
-  const handleTierFocus = (tierId: string) => {
-    if (!flatListRef.current) return;
-
-    // Find index in the main data array (inputs + calculations + tiers)
-    const tierIndexInData = data.findIndex(item => !('type' in item) && (item as Tier).id === tierId);
-
-    if (tierIndexInData !== -1) {
-      flatListRef.current.scrollToIndex({ 
-        index: tierIndexInData, 
-        animated: true, 
-        viewPosition: 0 // Position item at the top of the visible area
-      });
-    }
   };
 
   // Calculate values
@@ -227,7 +210,7 @@ export default function TierSimScreen() {
     <KeyboardAvoidingView 
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={styles.container}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 10 : 0}
+      keyboardVerticalOffset={0}
     >
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
         <SafeAreaView style={styles.container}>
@@ -253,7 +236,6 @@ export default function TierSimScreen() {
           </Animated.View>
 
           <FlatList
-            ref={flatListRef}
             style={styles.mainScrollView}
             ListHeaderComponent={
               null
@@ -372,7 +354,6 @@ export default function TierSimScreen() {
                     onUpdateTier={handleUpdateTier}
                     onToggleVisibility={handleToggleVisibility}
                     onDelete={handleDeleteTier}
-                    onFocusProp={handleTierFocus}
                   />
                 );
               }

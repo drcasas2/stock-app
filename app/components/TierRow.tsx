@@ -15,7 +15,6 @@ interface TierRowProps {
   onUpdateTier: (id: string, stockPrice: string, quantity: string) => void;
   onToggleVisibility: (id: string) => void;
   onDelete: (id: string) => void;
-  onFocusProp: (id: string) => void;
 }
 
 const formatNumberInput = (value: string): string => {
@@ -43,8 +42,7 @@ const TierRow = forwardRef((
     onUpdateTier,
     onToggleVisibility,
     onDelete,
-    onFocusProp,
-  }: TierRowProps,
+  }: Omit<TierRowProps, 'totalCost'>,
   ref
 ) => {
   const [localStockPrice, setLocalStockPrice] = useState(stockPrice);
@@ -114,7 +112,6 @@ const TierRow = forwardRef((
           returnKeyType="done"
           onSubmitEditing={Keyboard.dismiss}
           enablesReturnKeyAutomatically={true}
-          onFocus={() => onFocusProp(id)}
         />
         <TextInput
           style={[styles.tierInput, !isVisible && styles.tierInputDisabled]}
@@ -127,7 +124,6 @@ const TierRow = forwardRef((
           returnKeyType="done"
           onSubmitEditing={Keyboard.dismiss}
           enablesReturnKeyAutomatically={true}
-          onFocus={() => onFocusProp(id)}
         />
         <Text style={[styles.tierTotal, !isVisible && styles.tierTotalDisabled]}>
           {calculatedTotalCost}

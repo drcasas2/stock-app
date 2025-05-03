@@ -12,12 +12,15 @@ import {
   Image
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { GaugeConfig, MetricRange, MetricThreshold } from './types/gauge';
+import { GaugeConfig, MetricRange, MetricThreshold } from '../types/gauge';
+import { useRouter } from 'expo-router';
 
 // Import components
 import GaugeCard from './components/GaugeCard';
 import LinearGauge from './components/LinearGauge';
 import CircularGauge from './components/CircularGauge';
+import DropdownMenu from './components/DropdownMenu';
+import { NavigationOption } from './components/DropdownMenu';
 
 // Default values for new gauges
 const DEFAULT_TICKER = "TSLA";
@@ -43,7 +46,9 @@ type LayoutRow = GaugeConfig | GaugeConfig[];
 export default function DashboardScreen() {
   const [gaugeConfigs, setGaugeConfigs] = useState<GaugeConfig[]>([]);
   const [isSelectionVisible, setIsSelectionVisible] = useState(false);
+  const [isMenuVisible, setIsMenuVisible] = useState(false);
   const scrollY = useRef(new Animated.Value(0)).current;
+  const router = useRouter();
 
   // Helper function to build the layout rows based on pairing logic
   const buildLayoutRows = (configs: GaugeConfig[]): LayoutRow[] => {
@@ -140,6 +145,7 @@ export default function DashboardScreen() {
     extrapolate: 'clamp'
   });
 
+  // Restore headerBorder interpolation
   const headerBorder = scrollY.interpolate({
       inputRange: [0, 10],
       outputRange: [0, 1],
@@ -180,6 +186,20 @@ export default function DashboardScreen() {
       extrapolate: 'clamp'
   });
 
+  // Add animated margin bottom for the header
+  const headerMarginBottomAnimated = scrollY.interpolate({
+      inputRange: [0, 100], // Same range as other animations
+      outputRange: [10, 0], // Start with 10 margin, end with 0
+      extrapolate: 'clamp'
+  });
+
+  // Navigation options for the dropdown menu
+  const navigationOptions: NavigationOption[] = [
+    { label: 'Home', iconName: 'home-outline', onPress: () => router.push('/') }, // Add Home option
+    { label: 'Tier Simulator', iconName: 'layers-outline', onPress: () => router.push('/tier-sim') },
+    // Add other options as needed
+  ];
+
   // Process the configs into layout rows before rendering
   const processedRows = buildLayoutRows(gaugeConfigs);
 
@@ -191,10 +211,11 @@ export default function DashboardScreen() {
             {
                 paddingTop: headerPaddingTop,
                 paddingBottom: headerPaddingBottom,
-                borderBottomWidth: headerBorder, // Add dynamic border
+                borderBottomWidth: headerBorder, 
+                marginBottom: headerMarginBottomAnimated, // Apply animated margin
             }
         ]}>
-            <Pressable onPress={() => console.log('Menu Pressed')} style={styles.headerIconContainer}>
+            <Pressable onPress={() => setIsMenuVisible(true)} style={styles.headerIconContainer}>
                 {/* Wrap regular Icon in Animated.View and apply scale */}
                 <Animated.View style={{ transform: [{ scale: iconScale }] }}>
                     <Ionicons 
@@ -339,6 +360,13 @@ export default function DashboardScreen() {
                 </View>
             </Pressable>
         </Modal>
+
+        {/* Dropdown Menu */}
+        <DropdownMenu
+          isVisible={isMenuVisible}
+          onClose={() => setIsMenuVisible(false)}
+          navigationOptions={navigationOptions}
+        />
     </SafeAreaView>
   );
 }
@@ -356,8 +384,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 15,
     backgroundColor: '#ffffff',
+    position: 'relative',
     borderBottomColor: '#eee',
-    position: 'relative', // Needed for absolute positioning of children
+    // Remove static marginBottom
+    // marginBottom: 10,
   },
   headerTitleContainer: { // New style for absolute positioning
     position: 'absolute',

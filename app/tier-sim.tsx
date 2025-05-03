@@ -3,8 +3,11 @@ import { StatusBar } from "expo-status-bar";
 import { useState, useEffect, useMemo, useRef } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import TierRow from "./components/TierRow";
-import { Tier } from "./types/tier";
+import { Tier } from "../types/tier";
 import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from 'expo-router';
+import DropdownMenu from './components/DropdownMenu';
+import { NavigationOption } from './components/DropdownMenu';
 
 interface TopLevelCalculations {
   averageSharePrice: number;
@@ -23,7 +26,9 @@ export default function TierSimScreen() {
   const [cashBalance, setCashBalance] = useState<string>('');
   const [projectedPrice, setProjectedPrice] = useState<string>('');
   const [tiers, setTiers] = useState<Tier[]>([]);
+  const [isMenuVisible, setIsMenuVisible] = useState(false);
   const scrollY = useRef(new Animated.Value(0)).current;
+  const router = useRouter();
 
   // Formatted display values
   const formattedCashBalance = useMemo(() => {
@@ -186,14 +191,21 @@ export default function TierSimScreen() {
 
   const headerPaddingTop = scrollY.interpolate({
     inputRange: [0, 100 * 0.75],
-    outputRange: [20, 0],
+    outputRange: [10, 0],
     extrapolate: 'clamp'
   });
 
   const headerPaddingBottom = scrollY.interpolate({
     inputRange: [0, 100 * 0.75],
-    outputRange: [20, 10],
+    outputRange: [10, 5],
     extrapolate: 'clamp'
+  });
+
+  // Add headerBorder interpolation (same as dashboard)
+  const headerBorder = scrollY.interpolate({
+      inputRange: [0, 10],
+      outputRange: [0, 1],
+      extrapolate: 'clamp'
   });
 
   // Keep base icon sizes
@@ -233,6 +245,12 @@ export default function TierSimScreen() {
   // FlatList data
   const data = [{ type: 'inputs' }, { type: 'calculations' }, ...tiers];
 
+  // Navigation options for the dropdown menu
+  const navigationOptions: NavigationOption[] = [
+    { label: 'Home', iconName: 'home-outline', onPress: () => router.push('/') },
+    { label: 'Dashboard', iconName: 'speedometer-outline', onPress: () => router.push('/dashboard') },
+  ];
+
   return (
     <KeyboardAvoidingView 
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -246,10 +264,11 @@ export default function TierSimScreen() {
             {
               paddingTop: headerPaddingTop,
               paddingBottom: headerPaddingBottom,
-              borderBottomWidth: 1,
+              // Apply animated border width
+              borderBottomWidth: headerBorder,
             }
           ]}>
-            <Pressable onPress={() => console.log('Menu Pressed')} style={styles.headerIconContainer}>
+            <Pressable onPress={() => setIsMenuVisible(true)} style={styles.headerIconContainer}>
               <Animated.View style={{ transform: [{ scale: iconScale }] }}>
                 <Ionicons 
                   name="menu-outline" 
@@ -432,6 +451,13 @@ export default function TierSimScreen() {
               [{ nativeEvent: { contentOffset: { y: scrollY } } }],
               { useNativeDriver: false }
             )}
+          />
+
+          {/* Dropdown Menu */}
+          <DropdownMenu
+            isVisible={isMenuVisible}
+            onClose={() => setIsMenuVisible(false)}
+            navigationOptions={navigationOptions}
           />
         </SafeAreaView>
       </TouchableWithoutFeedback>

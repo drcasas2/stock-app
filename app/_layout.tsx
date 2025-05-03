@@ -17,6 +17,13 @@ export default function RootLayout() {
           headerShown: false
         }} 
       />
+      <Stack.Screen 
+        name="dashboard" 
+        options={{
+          title: "Dashboard",
+          headerShown: false
+        }}
+      />
     </Stack>
   );
 }

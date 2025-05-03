@@ -1,11 +1,10 @@
-import { StyleSheet, Text, View, SafeAreaView, TextInput, Keyboard, TouchableWithoutFeedback, Pressable, LayoutAnimation, Platform, UIManager, KeyboardAvoidingView, Animated, FlatList } from "react-native";
+import { StyleSheet, Text, View, SafeAreaView, TextInput, Keyboard, TouchableWithoutFeedback, Pressable, LayoutAnimation, Platform, UIManager, KeyboardAvoidingView, Animated, FlatList, Image } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { useState, useEffect, useMemo, useRef } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import TierRow from "./components/TierRow";
 import { Tier } from "./types/tier";
 import { Ionicons } from "@expo/vector-icons";
-import { Link } from 'expo-router';
 
 interface TopLevelCalculations {
   averageSharePrice: number;
@@ -197,10 +196,38 @@ export default function TierSimScreen() {
     extrapolate: 'clamp'
   });
 
-  const headerMarginBottom = scrollY.interpolate({
+  // Keep base icon sizes
+  const iconSizeLarge = 28;
+  const iconSizeSmall = 24;
+  const bellSizeLarge = 24;
+  const bellSizeSmall = 20;
+  const avatarSizeLarge = 28;
+  const avatarSizeSmall = 24;
+
+  // ADD interpolations for SCALE
+  const iconScale = scrollY.interpolate({
     inputRange: [0, 100],
-    outputRange: [10, 0],
+    outputRange: [1, iconSizeSmall / iconSizeLarge], // Scale down from 1
     extrapolate: 'clamp'
+  });
+
+  const bellScale = scrollY.interpolate({
+    inputRange: [0, 100],
+    outputRange: [1, bellSizeSmall / bellSizeLarge], // Scale down from 1
+    extrapolate: 'clamp'
+  });
+
+  // Keep avatar size and borderRadius interpolations
+  const avatarSize = scrollY.interpolate({
+      inputRange: [0, 100],
+      outputRange: [avatarSizeLarge, avatarSizeSmall],
+      extrapolate: 'clamp'
+  });
+
+  const avatarBorderRadius = scrollY.interpolate({
+      inputRange: [0, 100],
+      outputRange: [avatarSizeLarge / 2, avatarSizeSmall / 2],
+      extrapolate: 'clamp'
   });
 
   // FlatList data
@@ -219,20 +246,51 @@ export default function TierSimScreen() {
             {
               paddingTop: headerPaddingTop,
               paddingBottom: headerPaddingBottom,
+              borderBottomWidth: 1,
             }
           ]}>
-            <Animated.Text style={[
-              styles.headerTitle,
-              {
-                fontSize: headerFontSize,
-                marginBottom: headerMarginBottom
-              }
-            ]}>
-              Tier Simulator
-            </Animated.Text>
-            {/* <Link href={'/settings'} style={styles.settingsLink}>
-              <Text>Go to Settings</Text>
-            </Link> */}
+            <Pressable onPress={() => console.log('Menu Pressed')} style={styles.headerIconContainer}>
+              <Animated.View style={{ transform: [{ scale: iconScale }] }}>
+                <Ionicons 
+                  name="menu-outline" 
+                  size={iconSizeLarge}
+                  color="#333" 
+                />
+              </Animated.View>
+            </Pressable>
+
+            <View style={styles.headerTitleContainer}>
+              <Animated.Text style={[
+                styles.headerTitle,
+                {
+                  fontSize: headerFontSize,
+                }
+              ]}>
+                Tier Simulator
+              </Animated.Text>
+            </View>
+
+            <View style={styles.headerRightContainer}>
+              <Pressable onPress={() => console.log('Bell Pressed')} style={styles.headerIconContainer}>
+                <Animated.View style={{ transform: [{ scale: bellScale }] }}>
+                  <Ionicons 
+                    name="notifications-outline" 
+                    size={bellSizeLarge}
+                    color="#333" 
+                  />
+                </Animated.View>
+              </Pressable>
+              <Pressable onPress={() => console.log('Avatar Pressed')} style={styles.headerIconContainer}>
+                <Animated.View style={[
+                  styles.avatarPlaceholder,
+                  {
+                    width: avatarSize,
+                    height: avatarSize,
+                    borderRadius: avatarBorderRadius
+                  }
+                ]} />
+              </Pressable>
+            </View>
           </Animated.View>
 
           <FlatList
@@ -387,15 +445,39 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
   },
   header: {
-    paddingHorizontal: 20,
-    borderBottomWidth: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 15,
     borderBottomColor: '#eee',
     backgroundColor: '#fff',
-    zIndex: 10
+    zIndex: 10,
+    position: 'relative',
+  },
+  headerTitleContainer: {
+    position: 'absolute',
+    left: 50,
+    right: 50,
+    top: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   headerTitle: {
     fontWeight: 'bold',
-    textAlign: 'center',
+  },
+  headerRightContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  headerIconContainer: {
+    padding: 5,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatarPlaceholder: {
+    backgroundColor: '#ccc',
+    marginLeft: 8,
   },
   inputContainer: {
     marginBottom: 15,
@@ -518,11 +600,5 @@ const styles = StyleSheet.create({
   },
   fixedSection: {
     backgroundColor: '#fff',
-  },
-  settingsLink: {
-    position: 'absolute',
-    right: 20,
-    top: 25,
-    padding: 5,
   },
 });

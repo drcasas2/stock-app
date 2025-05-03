@@ -15,6 +15,12 @@ export default function HomeScreen() {
         >
           <Text style={styles.buttonText}>Go to Tier Simulator</Text>
         </Pressable>
+        <Pressable 
+          style={styles.button}
+          onPress={() => router.push('/dashboard')}
+        >
+          <Text style={styles.buttonText}>Go to Dashboard</Text>
+        </Pressable>
       </View>
     </SafeAreaView>
   );

@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View, 
   Text, 
@@ -9,7 +9,8 @@ import {
   Pressable,
   Modal,
   Animated,
-  Image
+  Image,
+  Dimensions
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { GaugeConfig, MetricRange, MetricThreshold } from '../types/gauge';
@@ -19,8 +20,8 @@ import { useRouter } from 'expo-router';
 import GaugeCard from './components/GaugeCard';
 import LinearGauge from './components/LinearGauge';
 import CircularGauge from './components/CircularGauge';
-import DropdownMenu from './components/DropdownMenu';
-import { NavigationOption } from './components/DropdownMenu';
+import SideMenu from './components/SideMenu';
+import { NavigationOption } from './components/SideMenu';
 
 // Default values for new gauges
 const DEFAULT_TICKER = "TSLA";
@@ -43,12 +44,62 @@ const DEFAULT_THRESHOLDS: MetricThreshold[] = [
 // Type definition for the processed row structure
 type LayoutRow = GaugeConfig | GaugeConfig[];
 
+// Get screen dimensions
+const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
+const menuWidth = screenWidth * 0.8; // 80% of screen width for menu
+
+// Define valid route paths (can be moved to a shared types file later)
+type RoutePath = '/' | '/dashboard' | '/tier-sim';
+
 export default function DashboardScreen() {
   const [gaugeConfigs, setGaugeConfigs] = useState<GaugeConfig[]>([]);
   const [isSelectionVisible, setIsSelectionVisible] = useState(false);
-  const [isMenuVisible, setIsMenuVisible] = useState(false);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
   const scrollY = useRef(new Animated.Value(0)).current;
   const router = useRouter();
+  const translateX = useRef(new Animated.Value(0)).current;
+  const overlayOpacity = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const targetTranslateX = isMenuOpen ? menuWidth : 0;
+    const targetOverlayOpacity = isMenuOpen ? 0.3 : 0;
+
+    Animated.parallel([
+      Animated.timing(translateX, {
+        toValue: targetTranslateX,
+        duration: 250,
+        useNativeDriver: true,
+      }),
+      Animated.timing(overlayOpacity, {
+        toValue: targetOverlayOpacity,
+        duration: 250,
+        useNativeDriver: true,
+      })
+    ]).start();
+  }, [isMenuOpen, translateX, overlayOpacity]);
+
+  const openMenu = () => setIsMenuOpen(true);
+  const closeMenu = () => setIsMenuOpen(false);
+
+  const handleNavigation = (path: RoutePath) => {
+    closeMenu();
+    setTimeout(() => {
+       router.push(path);
+    }, 100);
+  };
+
+  // Define handlers for SideMenu icons
+  const handleBellPress = () => {
+    console.log('SideMenu Bell Pressed');
+    // Add navigation or action later
+    closeMenu();
+ };
+
+  const handleAvatarPress = () => {
+    console.log('SideMenu Avatar Pressed');
+    // Add navigation or action later
+    closeMenu();
+  };
 
   // Helper function to build the layout rows based on pairing logic
   const buildLayoutRows = (configs: GaugeConfig[]): LayoutRow[] => {
@@ -195,188 +246,206 @@ export default function DashboardScreen() {
 
   // Navigation options for the dropdown menu
   const navigationOptions: NavigationOption[] = [
-    { label: 'Home', iconName: 'home-outline', onPress: () => router.push('/') }, // Add Home option
-    { label: 'Tier Simulator', iconName: 'layers-outline', onPress: () => router.push('/tier-sim') },
+    { label: 'Home', iconName: 'home-outline', onPress: () => handleNavigation('/') },
+    { label: 'Tier Simulator', iconName: 'layers-outline', onPress: () => handleNavigation('/tier-sim') },
     // Add other options as needed
   ];
 
   // Process the configs into layout rows before rendering
   const processedRows = buildLayoutRows(gaugeConfigs);
 
+  // Animated style for the page container
+  const pageAnimatedStyle = {
+    transform: [{ translateX: translateX }],
+    shadowColor: "#000",
+    shadowOffset: { width: -2, height: 0 },
+    shadowOpacity: isMenuOpen ? 0.15 : 0,
+    shadowRadius: 5,
+    elevation: isMenuOpen ? 5 : 0,
+  };
+
+  // Animated style for the internal overlay
+  const internalOverlayAnimatedStyle = {
+    opacity: overlayOpacity,
+  };
+
   return (
-    <SafeAreaView style={styles.container}>
-        {/* Animated Header */}
-        <Animated.View style={[
-            styles.header,
-            {
-                paddingTop: headerPaddingTop,
-                paddingBottom: headerPaddingBottom,
-                borderBottomWidth: headerBorder, 
-                marginBottom: headerMarginBottomAnimated, // Apply animated margin
-            }
-        ]}>
-            <Pressable onPress={() => setIsMenuVisible(true)} style={styles.headerIconContainer}>
-                {/* Wrap regular Icon in Animated.View and apply scale */}
+    <View style={styles.rootContainer}>
+      <SideMenu
+        navigationOptions={navigationOptions}
+        onClose={closeMenu}
+        onBellPress={handleBellPress}
+        onAvatarPress={handleAvatarPress}
+        bellIconSize={bellSizeLarge}
+        avatarIconSize={avatarSizeLarge}
+        menuWidth={menuWidth}
+      />
+
+      <Animated.View style={[styles.pageContainer, pageAnimatedStyle]}>
+        <SafeAreaView style={styles.safeAreaForPage}>
+          <Animated.View style={[
+              styles.header,
+              {
+                  paddingTop: headerPaddingTop,
+                  paddingBottom: headerPaddingBottom,
+                  borderBottomWidth: headerBorder,
+                  marginBottom: headerMarginBottomAnimated,
+              }
+          ]}>
+             <Pressable onPress={openMenu} style={styles.headerIconContainer} hitSlop={10}>
                 <Animated.View style={{ transform: [{ scale: iconScale }] }}>
-                    <Ionicons 
-                        name="menu-outline" 
-                        size={iconSizeLarge} // Use base large size
-                        color="#333" 
-                    />
+                    <Ionicons name="menu-outline" size={iconSizeLarge} color="#333" />
                 </Animated.View>
-            </Pressable>
-            {/* Absolute positioned container for true centering */}
-            <View style={styles.headerTitleContainer}>
-                <Animated.Text style={[
-                    styles.headerTitle,
-                    { fontSize: headerFontSize }
-                ]}>
+             </Pressable>
+             <View style={styles.headerTitleContainer}>
+                <Animated.Text style={[ styles.headerTitle, { fontSize: headerFontSize } ]}>
                     Dashboard
                 </Animated.Text>
-            </View>
-            <View style={styles.headerRightContainer}> 
-                 <Pressable onPress={() => console.log('Bell Pressed')} style={styles.headerIconContainer}>
-                    {/* Wrap regular Icon in Animated.View and apply scale */}
+             </View>
+             <View style={styles.headerRightContainer}>
+                 <Pressable onPress={() => console.log('Header Bell Pressed')} style={styles.headerIconContainer}>
                     <Animated.View style={{ transform: [{ scale: bellScale }] }}>
-                        <Ionicons 
-                            name="notifications-outline" 
-                            size={bellSizeLarge} // Use base large size
-                            color="#333" 
-                        />
+                        <Ionicons name="notifications-outline" size={bellSizeLarge} color="#333" />
                     </Animated.View>
                 </Pressable>
-                 <Pressable onPress={() => console.log('Avatar Pressed')} style={styles.headerIconContainer}>
-                    {/* Make placeholder an Animated.View */}
-                    <Animated.View style={[
-                        styles.avatarPlaceholder,
-                        {
-                            width: avatarSize,
-                            height: avatarSize,
-                            borderRadius: avatarBorderRadius,
-                        }
-                    ]} />
-                    {/* <Image source={{ uri: 'your_avatar_url' }} style={styles.avatarImage} /> */}
-                </Pressable>
-            </View>
-        </Animated.View>
-        
-        {/* Replace ScrollView with Animated.ScrollView */}
-        <Animated.ScrollView 
-            style={styles.scrollView}
-            scrollEventThrottle={16} // Important for smooth animation
-            onScroll={Animated.event(
-                [{ nativeEvent: { contentOffset: { y: scrollY } } }],
-                { useNativeDriver: false } // Must be false for layout animations like padding/fontSize
-            )}
-        >
-            {processedRows.length === 0 && (
-                <View style={styles.emptyContainer}>
-                    <Text style={styles.emptyText}>No gauges added yet.</Text>
-                    <Text style={styles.emptyText}>Press the '+' button to add one.</Text>
-                </View>
-            )}
+                 <Pressable onPress={() => console.log('Header Avatar Pressed')} style={styles.headerIconContainer}>
+                    <Animated.View style={[ styles.avatarPlaceholder, { width: avatarSize, height: avatarSize, borderRadius: avatarBorderRadius } ]} />
+                 </Pressable>
+             </View>
+          </Animated.View>
 
-            {/* Map over the processed rows and render accordingly */}
-            {processedRows.map((rowItem, index) => {
-                if (Array.isArray(rowItem)) {
-                    // --- Render a row of Circular Gauges ---
-                    return (
-                        <View key={`row-${index}`} style={styles.circularGaugeContainer}>
-                            {rowItem.map((gaugeConfig) => (
-                                <GaugeCard
-                                    key={gaugeConfig.id}
-                                    gaugeType={gaugeConfig.type} // Should always be 'circular' here
-                                    ticker={gaugeConfig.ticker}
-                                    metricName={gaugeConfig.metricName}
-                                >
-                                    <CircularGauge />
-                                    {/* Pass detailed props later */}
-                                </GaugeCard>
-                            ))}
-                        </View>
-                    );
-                } else {
-                    // --- Render a single Linear Gauge row ---
-                    const gaugeConfig = rowItem as GaugeConfig; // Type assertion
-                    return (
-                        <GaugeCard
-                            key={gaugeConfig.id}
-                            gaugeType={gaugeConfig.type} // Should always be 'linear' here
-                            ticker={gaugeConfig.ticker}
-                            metricName={gaugeConfig.metricName}
-                        >
-                            <LinearGauge />
-                            {/* Pass detailed props later */}
-                        </GaugeCard>
-                    );
-                }
-            })}
-        </Animated.ScrollView>
+          <Animated.ScrollView
+              style={styles.scrollView}
+              scrollEventThrottle={16}
+              onScroll={Animated.event(
+                  [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+                  { useNativeDriver: false }
+              )}
+              scrollEnabled={!isMenuOpen}
+          >
+              {processedRows.length === 0 && (
+                  <View style={styles.emptyContainer}>
+                      <Text style={styles.emptyText}>No gauges added yet.</Text>
+                      <Text style={styles.emptyText}>Press the '+' button to add one.</Text>
+                  </View>
+              )}
 
-        {/* Add Gauge Button */}
-        <Pressable style={styles.addButton} onPress={handleAddButtonPress}>
-            <Ionicons name="add-circle" size={50} color="#007AFF" />
-        </Pressable>
+              {processedRows.map((rowItem, index) => {
+                  if (Array.isArray(rowItem)) {
+                      // --- Render a row of Circular Gauges ---
+                      return (
+                          <View key={`row-${index}`} style={styles.circularGaugeContainer}>
+                              {rowItem.map((gaugeConfig) => (
+                                  <GaugeCard
+                                      key={gaugeConfig.id}
+                                      gaugeType={gaugeConfig.type} // Should always be 'circular' here
+                                      ticker={gaugeConfig.ticker}
+                                      metricName={gaugeConfig.metricName}
+                                  >
+                                      <CircularGauge />
+                                      {/* Pass detailed props later */}
+                                  </GaugeCard>
+                              ))}
+                          </View>
+                      );
+                  } else {
+                      // --- Render a single Linear Gauge row ---
+                      const gaugeConfig = rowItem as GaugeConfig; // Type assertion
+                      return (
+                          <GaugeCard
+                              key={gaugeConfig.id}
+                              gaugeType={gaugeConfig.type} // Should always be 'linear' here
+                              ticker={gaugeConfig.ticker}
+                              metricName={gaugeConfig.metricName}
+                          >
+                              <LinearGauge />
+                              {/* Pass detailed props later */}
+                          </GaugeCard>
+                      );
+                  }
+              })}
+          </Animated.ScrollView>
 
-        {/* Gauge Type Selection Modal */}
-        <Modal
-            animationType="fade" // Or "slide"
-            transparent={true}
-            visible={isSelectionVisible}
-            onRequestClose={() => {
-                setIsSelectionVisible(false); // Allow closing via back button (Android)
-            }}
-        >
-            <Pressable 
-                style={styles.modalBackdrop} 
-                onPress={() => setIsSelectionVisible(false)} // Close on backdrop press
-            >
-                <View 
-                    style={styles.modalContainer}
-                    onStartShouldSetResponder={() => true} // Prevent backdrop press through modal content
-                >
-                    <Text style={styles.modalTitle}>Choose Gauge Type</Text>
-                    
-                    <Pressable 
-                        style={styles.modalButton} 
-                        onPress={() => handleSelectGaugeType('linear')}
-                    >
-                        <Text style={styles.modalButtonText}>Linear Gauge</Text>
-                    </Pressable>
-                    
-                    <Pressable 
-                        style={styles.modalButton} 
-                        onPress={() => handleSelectGaugeType('circular')}
-                    >
-                        <Text style={styles.modalButtonText}>Circular Gauge</Text>
-                    </Pressable>
+          <Pressable style={styles.addButton} onPress={handleAddButtonPress}>
+             <Ionicons name="add-circle" size={50} color="#007AFF" />
+          </Pressable>
 
-                    <Pressable 
-                        style={[styles.modalButton, styles.cancelButton]} 
-                        onPress={() => setIsSelectionVisible(false)}
-                    >
-                        <Text style={styles.cancelButtonText}>Cancel</Text>
-                    </Pressable>
-                </View>
-            </Pressable>
-        </Modal>
+          <Modal
+             animationType="fade"
+             transparent={true}
+             visible={isSelectionVisible}
+             onRequestClose={() => { setIsSelectionVisible(false); }}
+          >
+             <Pressable
+                 style={styles.modalBackdrop}
+                 onPress={() => setIsSelectionVisible(false)}
+             >
+                 <View
+                     style={styles.modalContainer}
+                     onStartShouldSetResponder={() => true}
+                 >
+                      <Text style={styles.modalTitle}>Choose Gauge Type</Text>
+                      
+                      <Pressable 
+                          style={styles.modalButton} 
+                          onPress={() => handleSelectGaugeType('linear')}
+                      >
+                          <Text style={styles.modalButtonText}>Linear Gauge</Text>
+                      </Pressable>
+                      
+                      <Pressable 
+                          style={styles.modalButton} 
+                          onPress={() => handleSelectGaugeType('circular')}
+                      >
+                          <Text style={styles.modalButtonText}>Circular Gauge</Text>
+                      </Pressable>
 
-        {/* Dropdown Menu */}
-        <DropdownMenu
-          isVisible={isMenuVisible}
-          onClose={() => setIsMenuVisible(false)}
-          navigationOptions={navigationOptions}
-        />
-    </SafeAreaView>
+                      <Pressable 
+                          style={[styles.modalButton, styles.cancelButton]} 
+                          onPress={() => setIsSelectionVisible(false)}
+                      >
+                          <Text style={styles.cancelButtonText}>Cancel</Text>
+                      </Pressable>
+                 </View>
+             </Pressable>
+          </Modal>
+
+          <Pressable
+            style={styles.internalOverlayPressable}
+            onPress={closeMenu}
+            disabled={!isMenuOpen}
+            pointerEvents={isMenuOpen ? 'auto' : 'none'}
+          >
+            <Animated.View style={[styles.internalOverlayAnimatedView, internalOverlayAnimatedStyle]} />
+          </Pressable>
+
+        </SafeAreaView>
+      </Animated.View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  rootContainer: {
+    flex: 1,
+    backgroundColor: '#f8f8f8',
+  },
+  pageContainer: {
+    flex: 1,
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: 0,
+    right: 0,
+    overflow: 'hidden',
+  },
+  safeAreaForPage: {
+    flex: 1,
+    backgroundColor: '#ffffff',
+  },
   container: {
     flex: 1,
-    backgroundColor: '#ffffff', // Change background to white like tier-sim
-    // Remove paddingTop to allow header overlap with status bar
-    // paddingTop: StatusBar.currentHeight || 0, 
+    // Background handled by safeAreaForPage
   },
   header: {
     flexDirection: 'row',
@@ -386,8 +455,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     position: 'relative',
     borderBottomColor: '#eee',
-    // Remove static marginBottom
-    // marginBottom: 10,
+    zIndex: 10, // Keep header above scroll content
   },
   headerTitleContainer: { // New style for absolute positioning
     position: 'absolute',
@@ -460,7 +528,6 @@ const styles = StyleSheet.create({
     elevation: 5,
     // zIndex: 10, // Not usually needed for bottom position
   },
-  // Modal Styles
   modalBackdrop: {
     flex: 1,
     justifyContent: 'center',
@@ -506,5 +573,13 @@ const styles = StyleSheet.create({
     color: '#333',
     fontSize: 16,
     fontWeight: '500',
-  }
+  },
+  internalOverlayPressable: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 100, // Above page content, below modals
+  },
+  internalOverlayAnimatedView: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 1)',
+  },
 });

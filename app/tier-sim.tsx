@@ -1,4 +1,4 @@
-import { StyleSheet, Text, View, SafeAreaView, TextInput, Keyboard, TouchableWithoutFeedback, Pressable, LayoutAnimation, Platform, UIManager, KeyboardAvoidingView, Animated, FlatList, Image } from "react-native";
+import { StyleSheet, Text, View, SafeAreaView, TextInput, Keyboard, TouchableWithoutFeedback, Pressable, LayoutAnimation, Platform, UIManager, KeyboardAvoidingView, Animated, FlatList, Image, Dimensions } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { useState, useEffect, useMemo, useRef } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -6,8 +6,8 @@ import TierRow from "./components/TierRow";
 import { Tier } from "../types/tier";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from 'expo-router';
-import DropdownMenu from './components/DropdownMenu';
-import { NavigationOption } from './components/DropdownMenu';
+import SideMenu from './components/SideMenu';
+import { NavigationOption } from './components/SideMenu';
 
 interface TopLevelCalculations {
   averageSharePrice: number;
@@ -21,14 +21,65 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
+// Get screen dimensions
+const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
+const menuWidth = screenWidth * 0.8; // 80% of screen width for menu
+
+// Define valid route paths
+type RoutePath = '/' | '/dashboard' | '/tier-sim';
+
 export default function TierSimScreen() {
   // Top-level state
   const [cashBalance, setCashBalance] = useState<string>('');
   const [projectedPrice, setProjectedPrice] = useState<string>('');
   const [tiers, setTiers] = useState<Tier[]>([]);
-  const [isMenuVisible, setIsMenuVisible] = useState(false);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
   const scrollY = useRef(new Animated.Value(0)).current;
   const router = useRouter();
+  const translateX = useRef(new Animated.Value(0)).current;
+  const overlayOpacity = useRef(new Animated.Value(0)).current;
+
+  // Animation Logic
+  useEffect(() => {
+    const targetTranslateX = isMenuOpen ? menuWidth : 0;
+    const targetOverlayOpacity = isMenuOpen ? 0.3 : 0;
+
+    Animated.parallel([
+      Animated.timing(translateX, {
+        toValue: targetTranslateX,
+        duration: 250,
+        useNativeDriver: true,
+      }),
+      Animated.timing(overlayOpacity, {
+        toValue: targetOverlayOpacity,
+        duration: 250,
+        useNativeDriver: true,
+      })
+    ]).start();
+  }, [isMenuOpen, translateX, overlayOpacity]);
+
+  // Helper Functions
+  const openMenu = () => setIsMenuOpen(true);
+  const closeMenu = () => setIsMenuOpen(false);
+
+  const handleNavigation = (path: RoutePath) => {
+    closeMenu();
+    setTimeout(() => {
+       router.push(path);
+    }, 100); // Adjust delay if needed
+  };
+
+  const handleBellPress = () => {
+     console.log('SideMenu Bell Pressed');
+     // Add navigation or action later
+     closeMenu();
+  };
+
+  const handleAvatarPress = () => {
+    console.log('SideMenu Avatar Pressed');
+    // Add navigation or action later
+    closeMenu();
+  };
 
   // Formatted display values
   const formattedCashBalance = useMemo(() => {
@@ -245,230 +296,282 @@ export default function TierSimScreen() {
   // FlatList data
   const data = [{ type: 'inputs' }, { type: 'calculations' }, ...tiers];
 
-  // Navigation options for the dropdown menu
+  // Navigation options
   const navigationOptions: NavigationOption[] = [
-    { label: 'Home', iconName: 'home-outline', onPress: () => router.push('/') },
-    { label: 'Dashboard', iconName: 'speedometer-outline', onPress: () => router.push('/dashboard') },
+    { label: 'Home', iconName: 'home-outline', onPress: () => handleNavigation('/') },
+    { label: 'Dashboard', iconName: 'speedometer-outline', onPress: () => handleNavigation('/dashboard') },
   ];
 
+  // Animated style for the page container
+  const pageAnimatedStyle = {
+    transform: [{ translateX: translateX }],
+    shadowColor: "#000",
+    shadowOffset: {
+      width: -2,
+      height: 0,
+    },
+    shadowOpacity: isMenuOpen ? 0.15 : 0,
+    shadowRadius: 5,
+    elevation: isMenuOpen ? 5 : 0,
+  };
+
+  // Animated style for the internal overlay
+  const internalOverlayAnimatedStyle = {
+    opacity: overlayOpacity,
+  };
+
   return (
-    <KeyboardAvoidingView 
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={styles.container}
-      keyboardVerticalOffset={0}
-    >
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-        <SafeAreaView style={styles.container}>
-          <Animated.View style={[
-            styles.header,
-            {
-              paddingTop: headerPaddingTop,
-              paddingBottom: headerPaddingBottom,
-              // Apply animated border width
-              borderBottomWidth: headerBorder,
-            }
-          ]}>
-            <Pressable onPress={() => setIsMenuVisible(true)} style={styles.headerIconContainer}>
-              <Animated.View style={{ transform: [{ scale: iconScale }] }}>
-                <Ionicons 
-                  name="menu-outline" 
-                  size={iconSizeLarge}
-                  color="#333" 
-                />
-              </Animated.View>
-            </Pressable>
+    <View style={styles.rootContainer}>
+      <SideMenu
+        navigationOptions={navigationOptions}
+        onClose={closeMenu}
+        onBellPress={handleBellPress}
+        onAvatarPress={handleAvatarPress}
+        bellIconSize={bellSizeLarge}
+        avatarIconSize={avatarSizeLarge}
+        menuWidth={menuWidth}
+      />
 
-            <View style={styles.headerTitleContainer}>
-              <Animated.Text style={[
-                styles.headerTitle,
-                {
-                  fontSize: headerFontSize,
-                }
-              ]}>
-                Tier Simulator
-              </Animated.Text>
-            </View>
-
-            <View style={styles.headerRightContainer}>
-              <Pressable onPress={() => console.log('Bell Pressed')} style={styles.headerIconContainer}>
-                <Animated.View style={{ transform: [{ scale: bellScale }] }}>
-                  <Ionicons 
-                    name="notifications-outline" 
-                    size={bellSizeLarge}
-                    color="#333" 
-                  />
-                </Animated.View>
-              </Pressable>
-              <Pressable onPress={() => console.log('Avatar Pressed')} style={styles.headerIconContainer}>
+      <Animated.View style={[styles.pageContainer, pageAnimatedStyle]}>
+        <SafeAreaView style={styles.safeAreaForPage}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={styles.container}
+            keyboardVerticalOffset={0}
+          >
+            <TouchableWithoutFeedback onPress={Keyboard.dismiss} disabled={isMenuOpen}>
+              <View style={styles.container}>
                 <Animated.View style={[
-                  styles.avatarPlaceholder,
+                  styles.header,
                   {
-                    width: avatarSize,
-                    height: avatarSize,
-                    borderRadius: avatarBorderRadius
+                    paddingTop: headerPaddingTop,
+                    paddingBottom: headerPaddingBottom,
+                    borderBottomWidth: headerBorder,
                   }
-                ]} />
-              </Pressable>
-            </View>
-          </Animated.View>
-
-          <FlatList
-            style={styles.mainScrollView}
-            ListHeaderComponent={
-              null
-            }
-            data={data}
-            renderItem={({ item, index }) => {
-              if ('type' in item && item.type === 'inputs') {
-                return (
-                  <View style={styles.inputSection}>
-                    <View style={styles.inputContainer}>
-                      <Text style={styles.inputLabel}>Total Cash to Invest:</Text>
-                      <TextInput
-                        style={styles.input}
-                        placeholder="Enter total cash amount"
-                        placeholderTextColor="#666"
-                        keyboardType="numeric"
-                        value={formatNumberInput(cashBalance)}
-                        onChangeText={handleCashBalanceChange}
-                        returnKeyType="done"
-                        onSubmitEditing={() => Keyboard.dismiss()}
-                        enablesReturnKeyAutomatically={true}
+                ]}>
+                  <Pressable
+                    onPress={openMenu}
+                    style={styles.headerIconContainer}
+                    hitSlop={10}
+                  >
+                    <Animated.View style={{ transform: [{ scale: iconScale }] }}>
+                      <Ionicons
+                        name="menu-outline"
+                        size={iconSizeLarge}
+                        color="#333"
                       />
-                    </View>
-                    <View style={styles.inputContainer}>
-                      <Text style={styles.inputLabel}>Projected Price:</Text>
-                      <TextInput
-                        style={styles.input}
-                        placeholder="Enter projected price"
-                        placeholderTextColor="#666"
-                        keyboardType="numeric"
-                        value={formatNumberInput(projectedPrice)}
-                        onChangeText={handleProjectedPriceChange}
-                        returnKeyType="done"
-                        onSubmitEditing={() => Keyboard.dismiss()}
-                        enablesReturnKeyAutomatically={true}
-                      />
-                    </View>
-                  </View>
-                );
-              } else if ('type' in item && item.type === 'calculations') {
-                return (
-                  <View style={styles.fixedSection}>
-                    <View style={styles.calculationsContainer}>
-                      <View style={styles.calculationRow}>
-                        <Text style={styles.calculationLabel}>Remaining Cash Balance:</Text>
-                        <Text style={styles.calculationValue}>
-                          {new Intl.NumberFormat('en-US', {
-                            style: 'currency',
-                            currency: 'USD',
-                          }).format(calculations.remainingBalance)}
-                        </Text>
-                      </View>
-                      <View style={[styles.calculationRow, styles.divider]} />
-                      <View style={styles.calculationRow}>
-                        <Text style={styles.calculationLabel}>Average Share Price:</Text>
-                        <Text style={styles.calculationValue}>
-                          {new Intl.NumberFormat('en-US', {
-                            style: 'currency',
-                            currency: 'USD',
-                          }).format(calculations.averageSharePrice)}
-                        </Text>
-                      </View>
-                      <View style={styles.calculationRow}>
-                        <Text style={styles.calculationLabel}>Potential Dollar Gain:</Text>
-                        <Text style={styles.calculationValue}>
-                          {new Intl.NumberFormat('en-US', {
-                            style: 'currency',
-                            currency: 'USD',
-                          }).format(calculations.potentialGain)}
-                        </Text>
-                      </View>
-                      <View style={styles.calculationRow}>
-                        <Text style={styles.calculationLabel}>Potential Percentage Gain:</Text>
-                        <Text style={styles.calculationValue}>
-                          {calculations.potentialPercentage.toFixed(2)}%
-                        </Text>
-                      </View>
-                    </View>
-                    <View style={styles.stickyTiersHeader}>
-                      <View style={styles.tiersSectionHeader}>
-                        <Text style={styles.tiersSectionTitle}>Purchase Tiers</Text>
-                        <Pressable 
-                          style={styles.addTierButton}
-                          onPress={handleAddTier}
-                        >
-                          <Ionicons name="add-circle-outline" size={24} color="#007AFF" />
-                          <Text style={styles.addTierText}>Add Tier</Text>
-                        </Pressable>
-                      </View>
-                      <View style={styles.columnHeaders}>
-                        <View style={styles.visibilityColumn}>
-                          <Text style={styles.columnHeader}></Text>
-                        </View>
-                        <View style={styles.tierInputColumns}>
-                          <Text style={styles.columnHeader}>Price</Text>
-                          <Text style={styles.columnHeader}>Quantity</Text>
-                          <Text style={[styles.columnHeader, styles.totalHeader]}>Total Cost</Text>
-                        </View>
-                        <View style={styles.deleteColumn}>
-                          <Text style={styles.columnHeader}></Text>
-                        </View>
-                      </View>
-                    </View>
-                  </View>
-                );
-              } else {
-                // Ensure item is treated as Tier here
-                const tierItem = item as Tier;
-                return (
-                  <TierRow
-                    key={tierItem.id}
-                    id={tierItem.id}
-                    stockPrice={tierItem.stockPrice}
-                    quantity={tierItem.quantity}
-                    isVisible={tierItem.isVisible}
-                    onUpdateTier={handleUpdateTier}
-                    onToggleVisibility={handleToggleVisibility}
-                    onDelete={handleDeleteTier}
-                  />
-                );
-              }
-            }}
-            keyExtractor={(item, index) => {
-              if ('type' in item) {
-                 return `${item.type}-${index}`;
-              }
-              // If it's not a typed object, assume it's a Tier and use its id
-              const tierItem = item as Tier;
-              return tierItem.id;
-            }}
-            stickyHeaderIndices={[1]}
-            keyboardShouldPersistTaps="handled"
-            keyboardDismissMode="interactive"
-            scrollEventThrottle={16}
-            onScroll={Animated.event(
-              [{ nativeEvent: { contentOffset: { y: scrollY } } }],
-              { useNativeDriver: false }
-            )}
-          />
+                    </Animated.View>
+                  </Pressable>
 
-          {/* Dropdown Menu */}
-          <DropdownMenu
-            isVisible={isMenuVisible}
-            onClose={() => setIsMenuVisible(false)}
-            navigationOptions={navigationOptions}
-          />
+                  <View style={styles.headerTitleContainer}>
+                    <Animated.Text style={[
+                      styles.headerTitle,
+                      { fontSize: headerFontSize }
+                    ]}>
+                      Tier Simulator
+                    </Animated.Text>
+                  </View>
+
+                  <View style={styles.headerRightContainer}>
+                     <Pressable onPress={() => console.log('Header Bell Pressed')} style={styles.headerIconContainer}>
+                       <Animated.View style={{ transform: [{ scale: bellScale }] }}>
+                         <Ionicons
+                           name="notifications-outline"
+                           size={bellSizeLarge}
+                           color="#333"
+                         />
+                       </Animated.View>
+                     </Pressable>
+                     <Pressable onPress={() => console.log('Header Avatar Pressed')} style={styles.headerIconContainer}>
+                       <Animated.View style={[
+                         styles.avatarPlaceholder,
+                         {
+                           width: avatarSize,
+                           height: avatarSize,
+                           borderRadius: avatarBorderRadius
+                         }
+                       ]} />
+                     </Pressable>
+                   </View>
+                </Animated.View>
+
+                <FlatList
+                  style={styles.mainScrollView}
+                  ListHeaderComponent={
+                    null
+                  }
+                  data={data}
+                  renderItem={({ item, index }) => {
+                    if ('type' in item && item.type === 'inputs') {
+                      return (
+                        <View style={styles.inputSection}>
+                          <View style={styles.inputContainer}>
+                            <Text style={styles.inputLabel}>Total Cash to Invest:</Text>
+                            <TextInput
+                              style={styles.input}
+                              placeholder="Enter total cash amount"
+                              placeholderTextColor="#666"
+                              keyboardType="numeric"
+                              value={formatNumberInput(cashBalance)}
+                              onChangeText={handleCashBalanceChange}
+                              returnKeyType="done"
+                              onSubmitEditing={() => Keyboard.dismiss()}
+                              enablesReturnKeyAutomatically={true}
+                            />
+                          </View>
+                          <View style={styles.inputContainer}>
+                            <Text style={styles.inputLabel}>Projected Price:</Text>
+                            <TextInput
+                              style={styles.input}
+                              placeholder="Enter projected price"
+                              placeholderTextColor="#666"
+                              keyboardType="numeric"
+                              value={formatNumberInput(projectedPrice)}
+                              onChangeText={handleProjectedPriceChange}
+                              returnKeyType="done"
+                              onSubmitEditing={() => Keyboard.dismiss()}
+                              enablesReturnKeyAutomatically={true}
+                            />
+                          </View>
+                        </View>
+                      );
+                    } else if ('type' in item && item.type === 'calculations') {
+                      return (
+                        <View style={styles.fixedSection}>
+                          <View style={styles.calculationsContainer}>
+                            <View style={styles.calculationRow}>
+                              <Text style={styles.calculationLabel}>Remaining Cash Balance:</Text>
+                              <Text style={styles.calculationValue}>
+                                {new Intl.NumberFormat('en-US', {
+                                  style: 'currency',
+                                  currency: 'USD',
+                                }).format(calculations.remainingBalance)}
+                              </Text>
+                            </View>
+                            <View style={[styles.calculationRow, styles.divider]} />
+                            <View style={styles.calculationRow}>
+                              <Text style={styles.calculationLabel}>Average Share Price:</Text>
+                              <Text style={styles.calculationValue}>
+                                {new Intl.NumberFormat('en-US', {
+                                  style: 'currency',
+                                  currency: 'USD',
+                                }).format(calculations.averageSharePrice)}
+                              </Text>
+                            </View>
+                            <View style={styles.calculationRow}>
+                              <Text style={styles.calculationLabel}>Potential Dollar Gain:</Text>
+                              <Text style={styles.calculationValue}>
+                                {new Intl.NumberFormat('en-US', {
+                                  style: 'currency',
+                                  currency: 'USD',
+                                }).format(calculations.potentialGain)}
+                              </Text>
+                            </View>
+                            <View style={styles.calculationRow}>
+                              <Text style={styles.calculationLabel}>Potential Percentage Gain:</Text>
+                              <Text style={styles.calculationValue}>
+                                {calculations.potentialPercentage.toFixed(2)}%
+                              </Text>
+                            </View>
+                          </View>
+                          <View style={styles.stickyTiersHeader}>
+                            <View style={styles.tiersSectionHeader}>
+                              <Text style={styles.tiersSectionTitle}>Purchase Tiers</Text>
+                              <Pressable 
+                                style={styles.addTierButton}
+                                onPress={handleAddTier}
+                              >
+                                <Ionicons name="add-circle-outline" size={24} color="#007AFF" />
+                                <Text style={styles.addTierText}>Add Tier</Text>
+                              </Pressable>
+                            </View>
+                            <View style={styles.columnHeaders}>
+                              <View style={styles.visibilityColumn}>
+                                <Text style={styles.columnHeader}></Text>
+                              </View>
+                              <View style={styles.tierInputColumns}>
+                                <Text style={styles.columnHeader}>Price</Text>
+                                <Text style={styles.columnHeader}>Quantity</Text>
+                                <Text style={[styles.columnHeader, styles.totalHeader]}>Total Cost</Text>
+                              </View>
+                              <View style={styles.deleteColumn}>
+                                <Text style={styles.columnHeader}></Text>
+                              </View>
+                            </View>
+                          </View>
+                        </View>
+                      );
+                    } else {
+                      const tierItem = item as Tier;
+                      return (
+                        <TierRow
+                          key={tierItem.id}
+                          id={tierItem.id}
+                          stockPrice={tierItem.stockPrice}
+                          quantity={tierItem.quantity}
+                          isVisible={tierItem.isVisible}
+                          onUpdateTier={handleUpdateTier}
+                          onToggleVisibility={handleToggleVisibility}
+                          onDelete={handleDeleteTier}
+                        />
+                      );
+                    }
+                  }}
+                  keyExtractor={(item, index) => {
+                    if ('type' in item) {
+                       return `${item.type}-${index}`;
+                    }
+                    const tierItem = item as Tier;
+                    return tierItem.id;
+                  }}
+                  stickyHeaderIndices={[1]}
+                  keyboardShouldPersistTaps="handled"
+                  keyboardDismissMode="interactive"
+                  scrollEventThrottle={16}
+                  onScroll={Animated.event(
+                    [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+                    { useNativeDriver: false }
+                  )}
+                  scrollEnabled={!isMenuOpen}
+                />
+              </View>
+            </TouchableWithoutFeedback>
+          </KeyboardAvoidingView>
+
+          <Pressable
+            style={styles.internalOverlayPressable}
+            onPress={closeMenu}
+            disabled={!isMenuOpen}
+            pointerEvents={isMenuOpen ? 'auto' : 'none'}
+          >
+            <Animated.View style={[styles.internalOverlayAnimatedView, internalOverlayAnimatedStyle]} />
+          </Pressable>
         </SafeAreaView>
-      </TouchableWithoutFeedback>
-    </KeyboardAvoidingView>
+      </Animated.View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  rootContainer: {
+    flex: 1,
+    backgroundColor: '#f8f8f8',
+  },
+  pageContainer: {
+    flex: 1,
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: 0,
+    right: 0,
+    overflow: 'hidden',
+  },
+  safeAreaForPage: {
     flex: 1,
     backgroundColor: '#fff',
+  },
+  container: {
+    flex: 1,
   },
   header: {
     flexDirection: 'row',
@@ -626,5 +729,13 @@ const styles = StyleSheet.create({
   },
   fixedSection: {
     backgroundColor: '#fff',
+  },
+  internalOverlayPressable: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 100,
+  },
+  internalOverlayAnimatedView: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 1)',
   },
 });

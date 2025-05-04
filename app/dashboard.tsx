@@ -26,9 +26,9 @@ import { NavigationOption } from './components/SideMenu';
 // Default values for new gauges
 const DEFAULT_TICKER = "TSLA";
 const DEFAULT_METRIC_NAME = "P/S";
-const DEFAULT_VALUE = 8.0;
+const DEFAULT_VALUE = 2.5;
 const DEFAULT_MIN = 0.0;
-const DEFAULT_MAX = 20.0;
+const DEFAULT_MAX = 10.0;
 const DEFAULT_RANGES: MetricRange[] = [
   {rangeId : 1, start: 0, end: 5},
   {rangeId: 2, start:5, end:8},
@@ -37,8 +37,10 @@ const DEFAULT_RANGES: MetricRange[] = [
 ];
 const DEFAULT_THRESHOLDS: MetricThreshold[] = [
   {thresholdId: 1, value: 5},
-  {thresholdId: 2, value: 7.37},
-  {thresholdId: 3, value: 10}
+  {thresholdId: 2, value: 7.5},
+  { thresholdId: 3, value: 10 },
+  { thresholdId: 4, value: -15 },
+  { thresholdId: 5, value: 3 }
 ];
 
 // Type definition for the processed row structure
@@ -341,6 +343,11 @@ export default function DashboardScreen() {
                                       gaugeType={gaugeConfig.type} // Should always be 'circular' here
                                       ticker={gaugeConfig.ticker}
                                       metricName={gaugeConfig.metricName}
+                                      metricValue={gaugeConfig.metricValue}
+                                      metricMin={gaugeConfig.metricMin}
+                                      metricMax={gaugeConfig.metricMax}
+                                      metricRanges={gaugeConfig.metricRanges}
+                                      metricThresholds={gaugeConfig.metricThresholds}
                                   >
                                       <CircularGauge />
                                       {/* Pass detailed props later */}
@@ -357,6 +364,11 @@ export default function DashboardScreen() {
                               gaugeType={gaugeConfig.type} // Should always be 'linear' here
                               ticker={gaugeConfig.ticker}
                               metricName={gaugeConfig.metricName}
+                              metricValue={gaugeConfig.metricValue}
+                              metricMin={gaugeConfig.metricMin}
+                              metricMax={gaugeConfig.metricMax}
+                              metricRanges={gaugeConfig.metricRanges}
+                              metricThresholds={gaugeConfig.metricThresholds}
                           >
                               <LinearGauge />
                               {/* Pass detailed props later */}

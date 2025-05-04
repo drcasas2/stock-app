@@ -1,10 +1,18 @@
 import React from 'react';
 import { View, Text, StyleSheet, StyleProp, ViewStyle, Dimensions } from 'react-native';
+// Import the necessary types
+import { MetricRange, MetricThreshold } from '../../types/gauge';
 
 interface GaugeCardProps {
   gaugeType: 'linear' | 'circular';
   ticker: string;
   metricName: string;
+  // Add the new props for gauge data
+  metricValue: number;
+  metricMin: number;
+  metricMax: number;
+  metricRanges: MetricRange[];
+  metricThresholds: MetricThreshold[];
   children: React.ReactNode; // The actual gauge component
   style?: StyleProp<ViewStyle>;
 }
@@ -17,6 +25,12 @@ const GaugeCard: React.FC<GaugeCardProps> = ({
   gaugeType,
   ticker,
   metricName,
+  // Destructure the new props
+  metricValue,
+  metricMin,
+  metricMax,
+  metricRanges,
+  metricThresholds,
   children,
   style 
 }) => {
@@ -24,6 +38,17 @@ const GaugeCard: React.FC<GaugeCardProps> = ({
   // Determine specific styles based on gaugeType
   const typeSpecificStyle = gaugeType === 'linear' ? styles.linearCard : styles.circularCard;
   const metricContainerStyle = gaugeType === 'linear' ? styles.metricContainerLinear : styles.metricContainerCircular;
+
+  // Clone the child element (LinearGauge or CircularGauge) and pass the props
+  const gaugeElement = React.isValidElement(children) 
+    ? React.cloneElement(children as React.ReactElement<any>, {
+        value: metricValue,
+        min: metricMin,
+        max: metricMax,
+        ranges: metricRanges,
+        thresholds: metricThresholds,
+      })
+    : children;
 
   return (
     // Apply base, type-specific, and override styles
@@ -35,7 +60,7 @@ const GaugeCard: React.FC<GaugeCardProps> = ({
 
       {/* Main Content Area - Gauge */}
       <View style={styles.gaugeContainer}>
-        {children} 
+        {gaugeElement} 
       </View>
 
       {/* Metric Name Section - Apply conditional positioning */}
@@ -75,7 +100,7 @@ const styles = StyleSheet.create({
   },
   tickerContainer: {
     alignItems: 'center', // Center ticker text horizontally
-    marginBottom: 10,     // Space below ticker
+    marginBottom: 20,     // Space below ticker
   },
   tickerText: {
     fontSize: 16,

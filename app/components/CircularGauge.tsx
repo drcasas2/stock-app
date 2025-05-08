@@ -1,88 +1,71 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import { MetricRange, MetricThreshold } from '../../types/gauge'; // Import types
+import { Svg, Text as SvgText } from 'react-native-svg';
+import { MetricRange, MetricThreshold } from '../../types/gauge';
+import useGaugeLogic from '../hooks/useGaugeLogic';
 
-// Define props for the CircularGauge
+// --- Internal Constants for Styling and Layout (FROM STEP 2) ---
+const STROKE_WIDTH: number = 15;
+const GAUGE_BACKGROUND_COLOR: string = '#E0E0E0';
+const VALUE_ARC_COLOR: string = '#007AFF';
+const MAJOR_TICK_COLOR: string = '#002366';
+const MINOR_TICK_COLOR: string = '#607D8B';
+const TICK_LABEL_COLOR: string = '#002366';
+const VALUE_TEXT_COLOR: string = VALUE_ARC_COLOR;
+const NUMBER_OF_MAJOR_TICKS: number = 5;
+
+// --- SVG/Angle Constants (RETAINED from previous work, but not directly used in this step's placeholder output) ---
+const START_ANGLE_VISUAL_DEGREES = -225;
+const END_ANGLE_VISUAL_DEGREES = 45;
+const VISUAL_SWEEP_DEGREES = END_ANGLE_VISUAL_DEGREES - START_ANGLE_VISUAL_DEGREES;
+
+// --- Prop Types (FROM STEP 2) ---
 interface CircularGaugeProps {
   value: number;
   min: number;
   max: number;
-  ranges?: MetricRange[];       // Optional for now
-  thresholds?: MetricThreshold[]; // Optional for now
+  size: number;
+  ranges?: MetricRange[];
+  thresholds?: MetricThreshold[];
 }
 
-const CircularGauge: React.FC<CircularGaugeProps> = ({ 
-  value, 
-  min, 
-  max, 
-  ranges, 
-  thresholds 
+// --- Helper Functions (RETAINED from previous work, but not directly used in this step's placeholder output) ---
+// mapPercentToAngle, polarToCartesian, describeArc would be here, but commented out or removed if not used by placeholder
+// For simplicity of this step, they are omitted from direct use by the placeholder.
+
+const CircularGauge: React.FC<CircularGaugeProps> = ({
+  value,
+  min,
+  max,
+  size,
+  ranges,
+  thresholds,
 }) => {
-  
-  // Basic validation
-  if (min >= max) {
-    return (
-      <View style={styles.container}>
-        <Text style={styles.errorText}>Min must be less than Max.</Text>
-      </View>
-    );
-  }
+  const {
+    isValid,
+    // valuePercent, // Not directly used in this simplified placeholder
+    // fillStartPercent,
+    // fillEndPercent,
+  } = useGaugeLogic(value, min, max, thresholds, ranges); // Hook is still called
 
-  // Calculate percentage for potential future use (e.g., with SVG)
-  const percentage = Math.max(0, Math.min(100, ((value - min) / (max - min)) * 100));
+  // const centerX = size / 2; // Not used by this step's placeholder
+  // const centerY = size / 2;
 
+  // STEP 2: Placeholder focused on displaying props within an SVG context
   return (
-    <View style={styles.container}>
-      {/* Display the current value prominently */}
-      <Text style={styles.valueText}>{value.toFixed(2)}</Text>
-
-      {/* Display Min and Max values */}
-      <View style={styles.minMaxContainer}>
-        <Text style={styles.minMaxText}>Min: {min}</Text>
-        <Text style={styles.minMaxText}>Max: {max}</Text>
-      </View>
-
-      {/* Placeholder for threshold display if needed */}
-      {/* {thresholds && thresholds.map(t => <Text key={t.thresholdId}>T: {t.value}</Text>)} */}
-    </View>
+    <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+      {/* Temporary border for the SVG container itself */}
+      <SvgText x={10} y={20} fill="#333" fontSize="12" fontWeight="bold">
+        CircularGauge (Step 2 Check)
+      </SvgText>
+      <SvgText x={10} y={40} fill="#555" fontSize="10">Value: {value}</SvgText>
+      <SvgText x={10} y={55} fill="#555" fontSize="10">Min: {min}</SvgText>
+      <SvgText x={10} y={70} fill="#555" fontSize="10">Max: {max}</SvgText>
+      <SvgText x={10} y={85} fill="#555" fontSize="10">Size: {size}</SvgText>
+      <SvgText x={10} y={100} fill="#555" fontSize="10">Is Valid (hook): {String(isValid)}</SvgText>
+      {/* Future SVG elements (arcs, ticks, etc.) will replace this debug output */}
+    </Svg>
   );
 };
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1, 
-    width: '100%', 
-    height: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
-    // Remove placeholder background
-    // backgroundColor: '#e8f5e9',
-    padding: 10, // Add some internal padding
-  },
-  valueText: {
-    fontSize: 28, // Make value prominent
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 10, // Space below the main value
-  },
-  minMaxContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    width: '80%', // Don't let min/max text go to the edges
-  },
-  minMaxText: {
-    fontSize: 12,
-    color: '#666',
-  },
-  errorText: {
-    color: 'red',
-    fontSize: 12,
-  },
-  // placeholderText: { // Remove old placeholder style
-  //   fontSize: 12,
-  //   color: '#388e3c',
-  // },
-});
 
 export default CircularGauge;
 

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Svg, Path, Text as SvgText } from 'react-native-svg';
+import { Svg, Path, Text as SvgText, Line } from 'react-native-svg';
 import { MetricRange, MetricThreshold } from '../../types/gauge';
 import useGaugeLogic from '../hooks/useGaugeLogic';
 
@@ -12,6 +12,15 @@ const MINOR_TICK_COLOR: string = '#607D8B';
 const TICK_LABEL_COLOR: string = '#002366';
 const VALUE_TEXT_COLOR: string = VALUE_ARC_COLOR;
 const NUMBER_OF_MAJOR_TICKS: number = 5;
+
+// --- Tick Styling Constants ---
+const MAJOR_TICK_LENGTH = 10; 
+const MINOR_TICK_LENGTH = 5;  
+const TICK_LABEL_OFFSET = 5; // Additional offset for labels from the end of major ticks (towards center)
+const TICK_LABEL_FONT_SIZE = 10;
+
+// --- Central Value Styling --- 
+const VALUE_FONT_SIZE = 32; // Adjust as needed for visual fit
 
 // --- SVG/Angle Constants (RETAINED from previous work, but not directly used in this step's placeholder output) ---
 const START_ANGLE_VISUAL_DEGREES = -225+90;
@@ -74,22 +83,95 @@ const CircularGauge: React.FC<CircularGaugeProps> = ({
 
   const centerX = size / 2;
   const centerY = size / 2;
-  // Radius for the arcs, considering the stroke width to center the stroke on the edge
   const R = (size / 2) - (STROKE_WIDTH / 2);
-
-  // Calculate path for the background arc
   const backgroundArcPath = describeArc(centerX, centerY, R, START_ANGLE_VISUAL_DEGREES, END_ANGLE_VISUAL_DEGREES);
-
   let valueArcPath = "";
   if (isValid) {
     const valueStartAngle = mapPercentToAngle(fillStartPercent);
     const valueEndAngle = mapPercentToAngle(fillEndPercent);
     valueArcPath = describeArc(centerX, centerY, R, valueStartAngle, valueEndAngle);
   }
+  
+  const renderTicks = () => {
+    const ticksSvgElements = [];
+    if (max === min || !isValid) return null;
+    const numSegments = NUMBER_OF_MAJOR_TICKS - 1;
 
-  // STEP 2: Placeholder focused on displaying props within an SVG context
+    for (let i = 0; i < NUMBER_OF_MAJOR_TICKS; i++) {
+      const tickValue = min + (i * (max - min) / numSegments);
+      let tickPercent = ((tickValue - min) / (max - min)) * 100;
+      tickPercent = Math.max(0, Math.min(100, tickPercent));
+      const angle = mapPercentToAngle(tickPercent);
+      
+      // User-modified: Ticks start beyond the outer edge of the main arc stroke
+      const tickRadiusStart = R + STROKE_WIDTH/2 + STROKE_WIDTH/4; 
+      
+      const majorTickStartPoint = polarToCartesian(centerX, centerY, tickRadiusStart, angle);
+      const majorTickEndPoint = polarToCartesian(centerX, centerY, tickRadiusStart - MAJOR_TICK_LENGTH, angle); // Drawn inwards from the new start
+      ticksSvgElements.push(
+        <Line
+          key={`major-tick-${i}`}
+          x1={majorTickStartPoint.x}
+          y1={majorTickStartPoint.y}
+          x2={majorTickEndPoint.x}
+          y2={majorTickEndPoint.y}
+          stroke={MAJOR_TICK_COLOR}
+          strokeWidth={2}
+        />
+      );
+
+      const labelRadius = tickRadiusStart - MAJOR_TICK_LENGTH - TICK_LABEL_OFFSET;
+      const labelPos = polarToCartesian(centerX, centerY, labelRadius, angle);
+      const rangeDiff = max - min;
+      const showOneDecimal = rangeDiff > 0 && (rangeDiff < 5 || !Number.isInteger(min) || !Number.isInteger(max) || !Number.isInteger(rangeDiff / numSegments));
+      const labelText = showOneDecimal ? tickValue.toFixed(1) : tickValue.toFixed(0);
+      ticksSvgElements.push(
+        <SvgText
+          key={`label-${i}`}
+          x={labelPos.x}
+          y={labelPos.y}
+          fill={TICK_LABEL_COLOR}
+          fontSize={TICK_LABEL_FONT_SIZE}
+          textAnchor="middle"
+          dy={TICK_LABEL_FONT_SIZE / 3}
+        >
+          {labelText}
+        </SvgText>
+      );
+
+      if (i < numSegments) {
+        const minorTickValuePercent = tickPercent + (100 / numSegments / 2);
+        if (minorTickValuePercent < 100) { 
+            const minorAngle = mapPercentToAngle(minorTickValuePercent);
+            const minorTickStartPoint = polarToCartesian(centerX, centerY, tickRadiusStart, minorAngle);
+            // Minor ticks also start from the same extended radius but are shorter
+            const minorTickEndPoint = polarToCartesian(centerX, centerY, tickRadiusStart - MINOR_TICK_LENGTH, minorAngle);
+            ticksSvgElements.push(
+              <Line
+                key={`minor-tick-${i}`}
+                x1={minorTickStartPoint.x}
+                y1={minorTickStartPoint.y}
+                x2={minorTickEndPoint.x}
+                y2={minorTickEndPoint.y}
+                stroke={MINOR_TICK_COLOR}
+                strokeWidth={1}
+              />
+            );
+        }
+      }
+    }
+    return ticksSvgElements;
+  };
+
+  // Re-introduce viewBoxExpansion for scaling effect
+  const viewBoxExpansion = 15; 
+
   return (
-    <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+    <Svg 
+      width={size} 
+      height={size} 
+      viewBox={`${-viewBoxExpansion} ${-viewBoxExpansion} ${size + viewBoxExpansion * 2} ${size + viewBoxExpansion * 2}`}
+    >
       {/* Background Arc */}
       <Path
         d={backgroundArcPath}
@@ -98,29 +180,40 @@ const CircularGauge: React.FC<CircularGaugeProps> = ({
         fill="none"
         strokeLinecap="round" 
       />
-
-      {/* Value Arc - Drawn on top of the background */}
       {isValid && valueArcPath !== "" && (
         <Path
           d={valueArcPath}
           stroke={VALUE_ARC_COLOR}
-          strokeWidth={STROKE_WIDTH}
+          strokeWidth={STROKE_WIDTH} 
           fill="none"
-          strokeLinecap="butt"
+          strokeLinecap="round"
         />
       )}
+      {renderTicks()} 
 
-      {/* Debug Text (retained for now) */}
-      <SvgText x={10} y={20} fill="#333" fontSize="12" fontWeight="bold">
-        CircularGauge (Value Arc - Flat Ends)
-      </SvgText>
-      <SvgText x={10} y={40} fill="#555" fontSize="10">Value: {value} (Valid: {String(isValid)})</SvgText>
-      <SvgText x={10} y={55} fill="#555" fontSize="10">Min: {min}, Max: {max}, Size: {size.toFixed(2)}</SvgText>
-      <SvgText x={10} y={70} fill="#555" fontSize="10">Value %: {isValid ? valuePercent.toFixed(2) : 'N/A'}</SvgText>
-      <SvgText x={10} y={85} fill="#555" fontSize="10">Fill Start %: {isValid ? fillStartPercent.toFixed(2) : 'N/A'}</SvgText>
-      <SvgText x={10} y={100} fill="#555" fontSize="10">Fill End %: {isValid ? fillEndPercent.toFixed(2) : 'N/A'}</SvgText>
-      <SvgText x={10} y={115} fill="#555" fontSize="10">Calculated R: {R.toFixed(2)}</SvgText>
-      {/* Future SVG elements (arcs, ticks, etc.) will replace this debug output */}
+      {/* Central Value Text */}
+      {isValid && (
+        <SvgText
+          x={centerX}
+          y={centerY}
+          textAnchor="middle"
+          fontSize={VALUE_FONT_SIZE}
+          fontWeight="bold"
+          fill={VALUE_TEXT_COLOR}
+          dy={VALUE_FONT_SIZE / 3} // Adjust for vertical centering
+        >
+          {value.toFixed(2)} {/* Example formatting */} 
+        </SvgText>
+      )}
+      
+      {/* Display Invalid State centrally if needed */}
+      {!isValid && (
+         <SvgText x={centerX} y={centerY} fill="red" fontSize="12" textAnchor="middle">
+           Invalid State
+         </SvgText>
+      )} 
+
+      {/* Debug Text commented out */}
     </Svg>
   );
 };

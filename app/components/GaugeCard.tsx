@@ -23,7 +23,7 @@ interface GaugeCardProps {
 const screenWidth = Dimensions.get('window').width;
 const cardHorizontalMargin = 15; // Margin on the left/right of the screen for linear cards
 const gridItemMargin = 8; // Margin around each circular card in the grid
-const circularCardPaddingHorizontal = 15; // Defined as a constant for clarity
+const circularCardPaddingHorizontal = 5; // Reduced from 15 to 5
 
 const GaugeCard: React.FC<GaugeCardProps> = ({ 
   gaugeType,
@@ -101,7 +101,7 @@ const styles = StyleSheet.create({
     // Base styles common to all cards
     backgroundColor: '#ffffff',
     borderRadius: 10,
-    padding: 15, 
+    // padding: 15, // General padding removed to rely on specific paddings
     // Add shadow for card effect
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -115,18 +115,21 @@ const styles = StyleSheet.create({
     width: screenWidth - (cardHorizontalMargin * 2), // Full width minus screen margins
     marginHorizontal: cardHorizontalMargin, // Center card on screen
     marginBottom: 15, // Vertical spacing between linear cards
+    paddingHorizontal: 10, // Example padding for linear cards
+    paddingVertical: 10,
   },
   circularCard: {
     width: (screenWidth / 2) - (gridItemMargin * 2), 
     marginHorizontal: gridItemMargin, 
     marginBottom: 15,
-    minHeight: 225, //Changed from 150 to 225 to allow for more space for Circular Gauge
+    minHeight: 220, //Changed from 150 to 225 to allow for more space for Circular Gauge
     aspectRatio: 1.2, 
-    paddingHorizontal: circularCardPaddingHorizontal, // Use the constant
+    paddingHorizontal: circularCardPaddingHorizontal, // Now 5
+    paddingVertical: 10, // Added some vertical padding as well, adjust if needed
   },
   tickerContainer: {
     alignItems: 'center', // Center ticker text horizontally
-    marginBottom: 12,     // Space below ticker
+    marginBottom: 21,     // Space below ticker
   },
   tickerText: {
     fontSize: 18,
